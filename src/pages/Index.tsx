@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import MasterCartonTab from "@/components/MasterCartonTab";
 import PalletTab from "@/components/PalletTab";
 import ContainerTab from "@/components/ContainerTab";
-import { Package, Pallet, Container } from "lucide-react";
+import { Package, Truck, Container } from "lucide-react";
 
 const Index = () => {
   return (
@@ -29,7 +29,7 @@ const Index = () => {
                   Master Carton Loading
                 </TabsTrigger>
                 <TabsTrigger value="pallet" className="flex items-center gap-2">
-                  <Pallet size={20} />
+                  <Truck size={20} />
                   Pallet Loading
                 </TabsTrigger>
                 <TabsTrigger value="container" className="flex items-center gap-2">

@@ -39,7 +39,7 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
     <>
       {/* Container/Carton outline */}
       <Box args={[6, 4, 3]} position={[0, 0, 0]}>
-        <meshBasicMaterial wireframe color="#444" />
+        <meshBasicMaterial wireframe={true} color="#444" />
       </Box>
 
       {/* Items being loaded */}
@@ -55,30 +55,14 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
         );
       })}
 
-      {/* Controls */}
-      <Html position={[0, -3, 0]}>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={toggleAnimation}>
-            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-          </Button>
-          <Button size="sm" onClick={resetAnimation}>
-            <RotateCcw size={16} />
-          </Button>
-        </div>
-      </Html>
+      {/* Control buttons positioned outside the 3D scene */}
+      <group position={[0, -3, 0]}>
+        <mesh position={[0, 0, 0]}>
+          <planeGeometry args={[2, 0.5]} />
+          <meshBasicMaterial transparent opacity={0} />
+        </mesh>
+      </group>
     </>
-  );
-};
-
-const Html = ({ children, position }: { children: React.ReactNode, position: [number, number, number] }) => {
-  return (
-    <group position={position}>
-      <mesh>
-        <planeGeometry args={[0.1, 0.1]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
-      <primitive object={{ type: 'HTML', element: children }} />
-    </group>
   );
 };
 
@@ -87,7 +71,7 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
     <>
       {/* Container outline */}
       <Box args={[6, 4, 3]} position={[0, 0, 0]}>
-        <meshBasicMaterial wireframe color="#444" />
+        <meshBasicMaterial wireframe={true} color="#444" />
       </Box>
 
       {/* All items loaded */}
