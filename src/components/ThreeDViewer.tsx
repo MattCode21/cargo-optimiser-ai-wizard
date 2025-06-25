@@ -54,14 +54,6 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
           </Box>
         );
       })}
-
-      {/* Control buttons positioned outside the 3D scene */}
-      <group position={[0, -3, 0]}>
-        <mesh position={[0, 0, 0]}>
-          <planeGeometry args={[2, 0.5]} />
-          <meshBasicMaterial transparent opacity={0} />
-        </mesh>
-      </group>
     </>
   );
 };
