@@ -44,6 +44,25 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
     return () => clearTimeout(timer);
   }, [currentItem, itemCount, isPlaying]);
 
+  // Calculate positions to fit within container (6x4x3)
+  // Container bounds: x: -3 to 3, y: -2 to 2, z: -1.5 to 1.5
+  // Box size: 1.2x0.6x0.8 to fit better
+  const getPosition = (index: number): [number, number, number] => {
+    const itemsPerRow = 4;
+    const itemsPerLayer = 8;
+    
+    const layer = Math.floor(index / itemsPerLayer);
+    const indexInLayer = index % itemsPerLayer;
+    const row = Math.floor(indexInLayer / itemsPerRow);
+    const col = indexInLayer % itemsPerRow;
+    
+    const x = (col - 1.5) * 1.4; // -2.1 to 2.1
+    const z = (row - 0.5) * 1.2; // -0.6 to 0.6
+    const y = -1.5 + (layer * 0.8); // Start from bottom
+    
+    return [x, y, z];
+  };
+
   return (
     <>
       {/* Container/Carton outline */}
@@ -51,15 +70,13 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
 
       {/* Items being loaded */}
       {Array.from({ length: currentItem }).map((_, index) => {
-        const x = (index % 3) * 1.8 - 1.8;
-        const z = Math.floor(index / 3) * 1.2 - 1.2;
-        const y = Math.floor(index / 9) * 1 - 1.5;
+        const position = getPosition(index);
 
         return (
           <SimpleBox
             key={index}
-            position={[x, y, z]}
-            args={[1.5, 0.8, 1]}
+            position={position}
+            args={[1.2, 0.6, 0.8]}
             color={`hsl(${index * 30}, 70%, 60%)`}
           />
         );
@@ -69,6 +86,23 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
 };
 
 const StaticResult = ({ itemCount }: { itemCount: number }) => {
+  // Same positioning logic as LoadingAnimation
+  const getPosition = (index: number): [number, number, number] => {
+    const itemsPerRow = 4;
+    const itemsPerLayer = 8;
+    
+    const layer = Math.floor(index / itemsPerLayer);
+    const indexInLayer = index % itemsPerLayer;
+    const row = Math.floor(indexInLayer / itemsPerRow);
+    const col = indexInLayer % itemsPerRow;
+    
+    const x = (col - 1.5) * 1.4;
+    const z = (row - 0.5) * 1.2;
+    const y = -1.5 + (layer * 0.8);
+    
+    return [x, y, z];
+  };
+
   return (
     <>
       {/* Container outline */}
@@ -76,26 +110,36 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
 
       {/* All items loaded */}
       {Array.from({ length: itemCount }).map((_, index) => {
-        const x = (index % 3) * 1.8 - 1.8;
-        const z = Math.floor(index / 3) * 1.2 - 1.2;
-        const y = Math.floor(index / 9) * 1 - 1.5;
+        const position = getPosition(index);
 
         return (
           <SimpleBox
             key={index}
-            position={[x, y, z]}
-            args={[1.5, 0.8, 1]}
+            position={position}
+            args={[1.2, 0.6, 0.8]}
             color={`hsl(${index * 30}, 70%, 60%)`}
           />
         );
       })}
-
-      {/* Simple text using HTML overlay instead of Three.js Text */}
     </>
   );
 };
 
 const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) => {
+  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
+
+  useEffect(() => {
+    if (showResult && !isLoading) {
+      // Show loading animation first, then static result
+      setShowLoadingAnimation(true);
+      const timer = setTimeout(() => {
+        setShowLoadingAnimation(false);
+      }, Math.min(maxItems, 12) * 500 + 1000); // Animation duration + 1 second buffer
+
+      return () => clearTimeout(timer);
+    }
+  }, [showResult, isLoading, maxItems]);
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -113,11 +157,17 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
               <Canvas camera={{ position: [8, 6, 8], fov: 50 }}>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
-                <StaticResult itemCount={Math.min(maxItems, 12)} />
+                {showLoadingAnimation ? (
+                  <LoadingAnimation itemCount={Math.min(maxItems, 12)} />
+                ) : (
+                  <StaticResult itemCount={Math.min(maxItems, 12)} />
+                )}
                 <OrbitControls enableZoom enablePan enableRotate />
               </Canvas>
               <div className="absolute top-4 left-4 bg-white/90 px-3 py-2 rounded-md shadow-md">
-                <p className="text-sm font-medium">Optimized Loading: {Math.min(maxItems, 12)} Items</p>
+                <p className="text-sm font-medium">
+                  {showLoadingAnimation ? 'Loading Items...' : `Optimized Loading: ${Math.min(maxItems, 12)} Items`}
+                </p>
               </div>
             </>
           ) : (
