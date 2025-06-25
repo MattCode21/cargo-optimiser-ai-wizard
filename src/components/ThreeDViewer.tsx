@@ -3,8 +3,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Box, Text } from '@react-three/drei';
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Play, Pause, RotateCcw, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface ThreeDViewerProps {
   isLoading: boolean;
@@ -26,20 +25,11 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
     return () => clearTimeout(timer);
   }, [currentItem, itemCount, isPlaying]);
 
-  const resetAnimation = () => {
-    setCurrentItem(0);
-    setIsPlaying(true);
-  };
-
-  const toggleAnimation = () => {
-    setIsPlaying(!isPlaying);
-  };
-
   return (
     <>
       {/* Container/Carton outline */}
       <Box args={[6, 4, 3]} position={[0, 0, 0]}>
-        <meshBasicMaterial wireframe={true} color="#444" />
+        <meshBasicMaterial wireframe color="#444" />
       </Box>
 
       {/* Items being loaded */}
@@ -63,7 +53,7 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
     <>
       {/* Container outline */}
       <Box args={[6, 4, 3]} position={[0, 0, 0]}>
-        <meshBasicMaterial wireframe={true} color="#444" />
+        <meshBasicMaterial wireframe color="#444" />
       </Box>
 
       {/* All items loaded */}
@@ -111,7 +101,7 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
               <ambientLight intensity={0.6} />
               <directionalLight position={[10, 10, 5]} intensity={1} />
               <StaticResult itemCount={Math.min(maxItems, 12)} />
-              <OrbitControls enableZoom={true} enablePan={true} enableRotate={true} />
+              <OrbitControls enableZoom enablePan enableRotate />
             </Canvas>
           ) : (
             <div className="h-full flex items-center justify-center">
