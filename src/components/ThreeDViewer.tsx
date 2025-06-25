@@ -30,6 +30,18 @@ const WireframeBox = ({ position, args }: { position: [number, number, number], 
   );
 };
 
+// Calculate maximum items that can fit in the container
+const calculateMaxFittableItems = () => {
+  const containerDimensions = [6, 4, 3]; // [length, width, height]
+  const itemDimensions = [1.2, 0.6, 0.8]; // [length, width, height]
+  
+  const itemsX = Math.floor(containerDimensions[0] / itemDimensions[0]);
+  const itemsY = Math.floor(containerDimensions[1] / itemDimensions[1]);
+  const itemsZ = Math.floor(containerDimensions[2] / itemDimensions[2]);
+  
+  return itemsX * itemsY * itemsZ;
+};
+
 const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   const [currentItem, setCurrentItem] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -39,26 +51,27 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
 
     const timer = setTimeout(() => {
       setCurrentItem(prev => Math.min(prev + 1, itemCount));
-    }, 500);
+    }, 300); // Faster animation for more items
 
     return () => clearTimeout(timer);
   }, [currentItem, itemCount, isPlaying]);
 
   // Calculate positions to fit within container (6x4x3)
   // Container bounds: x: -3 to 3, y: -2 to 2, z: -1.5 to 1.5
-  // Box size: 1.2x0.6x0.8 to fit better
+  // Box size: 1.2x0.6x0.8
   const getPosition = (index: number): [number, number, number] => {
-    const itemsPerRow = 4;
-    const itemsPerLayer = 8;
+    const itemsPerX = Math.floor(6 / 1.2); // 5 items
+    const itemsPerY = Math.floor(4 / 0.6); // 6 items  
+    const itemsPerZ = Math.floor(3 / 0.8); // 3 items
     
-    const layer = Math.floor(index / itemsPerLayer);
-    const indexInLayer = index % itemsPerLayer;
-    const row = Math.floor(indexInLayer / itemsPerRow);
-    const col = indexInLayer % itemsPerRow;
+    const layer = Math.floor(index / (itemsPerX * itemsPerY));
+    const indexInLayer = index % (itemsPerX * itemsPerY);
+    const row = Math.floor(indexInLayer / itemsPerX);
+    const col = indexInLayer % itemsPerX;
     
-    const x = (col - 1.5) * 1.4; // -2.1 to 2.1
-    const z = (row - 0.5) * 1.2; // -0.6 to 0.6
-    const y = -1.5 + (layer * 0.8); // Start from bottom
+    const x = -2.4 + (col * 1.2); // Start from left edge
+    const y = -1.8 + (row * 0.6); // Start from bottom
+    const z = -1.2 + (layer * 0.8); // Start from front
     
     return [x, y, z];
   };
@@ -77,7 +90,7 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
             key={index}
             position={position}
             args={[1.2, 0.6, 0.8]}
-            color={`hsl(${index * 30}, 70%, 60%)`}
+            color={`hsl(${index * 15}, 70%, 60%)`}
           />
         );
       })}
@@ -88,17 +101,18 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
 const StaticResult = ({ itemCount }: { itemCount: number }) => {
   // Same positioning logic as LoadingAnimation
   const getPosition = (index: number): [number, number, number] => {
-    const itemsPerRow = 4;
-    const itemsPerLayer = 8;
+    const itemsPerX = Math.floor(6 / 1.2); // 5 items
+    const itemsPerY = Math.floor(4 / 0.6); // 6 items  
+    const itemsPerZ = Math.floor(3 / 0.8); // 3 items
     
-    const layer = Math.floor(index / itemsPerLayer);
-    const indexInLayer = index % itemsPerLayer;
-    const row = Math.floor(indexInLayer / itemsPerRow);
-    const col = indexInLayer % itemsPerRow;
+    const layer = Math.floor(index / (itemsPerX * itemsPerY));
+    const indexInLayer = index % (itemsPerX * itemsPerY);
+    const row = Math.floor(indexInLayer / itemsPerX);
+    const col = indexInLayer % itemsPerX;
     
-    const x = (col - 1.5) * 1.4;
-    const z = (row - 0.5) * 1.2;
-    const y = -1.5 + (layer * 0.8);
+    const x = -2.4 + (col * 1.2); // Start from left edge
+    const y = -1.8 + (row * 0.6); // Start from bottom
+    const z = -1.2 + (layer * 0.8); // Start from front
     
     return [x, y, z];
   };
@@ -117,7 +131,7 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
             key={index}
             position={position}
             args={[1.2, 0.6, 0.8]}
-            color={`hsl(${index * 30}, 70%, 60%)`}
+            color={`hsl(${index * 15}, 70%, 60%)`}
           />
         );
       })}
@@ -127,6 +141,10 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
 
 const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) => {
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
+  
+  // Calculate the actual maximum items that can fit, regardless of input maxItems
+  const maxFittableItems = calculateMaxFittableItems();
+  const actualMaxItems = Math.min(maxItems, maxFittableItems);
 
   useEffect(() => {
     if (showResult && !isLoading) {
@@ -134,11 +152,11 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
       setShowLoadingAnimation(true);
       const timer = setTimeout(() => {
         setShowLoadingAnimation(false);
-      }, Math.min(maxItems, 12) * 500 + 1000); // Animation duration + 1 second buffer
+      }, actualMaxItems * 300 + 1000); // Animation duration + 1 second buffer
 
       return () => clearTimeout(timer);
     }
-  }, [showResult, isLoading, maxItems]);
+  }, [showResult, isLoading, actualMaxItems]);
 
   return (
     <Card>
@@ -158,15 +176,18 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
                 <ambientLight intensity={0.6} />
                 <directionalLight position={[10, 10, 5]} intensity={1} />
                 {showLoadingAnimation ? (
-                  <LoadingAnimation itemCount={Math.min(maxItems, 12)} />
+                  <LoadingAnimation itemCount={actualMaxItems} />
                 ) : (
-                  <StaticResult itemCount={Math.min(maxItems, 12)} />
+                  <StaticResult itemCount={actualMaxItems} />
                 )}
                 <OrbitControls enableZoom enablePan enableRotate />
               </Canvas>
               <div className="absolute top-4 left-4 bg-white/90 px-3 py-2 rounded-md shadow-md">
                 <p className="text-sm font-medium">
-                  {showLoadingAnimation ? 'Loading Items...' : `Optimized Loading: ${Math.min(maxItems, 12)} Items`}
+                  {showLoadingAnimation ? 'Loading Items...' : `Optimized Loading: ${actualMaxItems} Items`}
+                </p>
+                <p className="text-xs text-gray-600">
+                  Max capacity: {maxFittableItems} items
                 </p>
               </div>
             </>
