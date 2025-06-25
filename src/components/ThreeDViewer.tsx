@@ -1,15 +1,34 @@
 
 import { useRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Box, Text } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import * as THREE from 'three';
 
 interface ThreeDViewerProps {
   isLoading: boolean;
   showResult: boolean;
   maxItems: number;
 }
+
+const SimpleBox = ({ position, args, color }: { position: [number, number, number], args: [number, number, number], color: string }) => {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={args} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+};
+
+const WireframeBox = ({ position, args }: { position: [number, number, number], args: [number, number, number] }) => {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={args} />
+      <meshBasicMaterial wireframe color="#444" />
+    </mesh>
+  );
+};
 
 const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   const [currentItem, setCurrentItem] = useState(0);
@@ -28,9 +47,7 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   return (
     <>
       {/* Container/Carton outline */}
-      <Box args={[6, 4, 3]} position={[0, 0, 0]}>
-        <meshBasicMaterial wireframe color="#444" />
-      </Box>
+      <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
 
       {/* Items being loaded */}
       {Array.from({ length: currentItem }).map((_, index) => {
@@ -39,9 +56,12 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
         const y = Math.floor(index / 9) * 1 - 1.5;
 
         return (
-          <Box key={index} args={[1.5, 0.8, 1]} position={[x, y, z]}>
-            <meshStandardMaterial color={`hsl(${index * 30}, 70%, 60%)`} />
-          </Box>
+          <SimpleBox
+            key={index}
+            position={[x, y, z]}
+            args={[1.5, 0.8, 1]}
+            color={`hsl(${index * 30}, 70%, 60%)`}
+          />
         );
       })}
     </>
@@ -52,9 +72,7 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
   return (
     <>
       {/* Container outline */}
-      <Box args={[6, 4, 3]} position={[0, 0, 0]}>
-        <meshBasicMaterial wireframe color="#444" />
-      </Box>
+      <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
 
       {/* All items loaded */}
       {Array.from({ length: itemCount }).map((_, index) => {
@@ -63,22 +81,16 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
         const y = Math.floor(index / 9) * 1 - 1.5;
 
         return (
-          <Box key={index} args={[1.5, 0.8, 1]} position={[x, y, z]}>
-            <meshStandardMaterial color={`hsl(${index * 30}, 70%, 60%)`} />
-          </Box>
+          <SimpleBox
+            key={index}
+            position={[x, y, z]}
+            args={[1.5, 0.8, 1]}
+            color={`hsl(${index * 30}, 70%, 60%)`}
+          />
         );
       })}
 
-      {/* Label */}
-      <Text
-        position={[0, 2.5, 0]}
-        fontSize={0.5}
-        color="#333"
-        anchorX="center"
-        anchorY="middle"
-      >
-        Optimized Loading: {itemCount} Items
-      </Text>
+      {/* Simple text using HTML overlay instead of Three.js Text */}
     </>
   );
 };
@@ -87,7 +99,7 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="h-96 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg overflow-hidden">
+        <div className="h-96 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg overflow-hidden relative">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
@@ -97,12 +109,17 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
               </div>
             </div>
           ) : showResult ? (
-            <Canvas camera={{ position: [8, 6, 8], fov: 50 }}>
-              <ambientLight intensity={0.6} />
-              <directionalLight position={[10, 10, 5]} intensity={1} />
-              <StaticResult itemCount={Math.min(maxItems, 12)} />
-              <OrbitControls enableZoom enablePan enableRotate />
-            </Canvas>
+            <>
+              <Canvas camera={{ position: [8, 6, 8], fov: 50 }}>
+                <ambientLight intensity={0.6} />
+                <directionalLight position={[10, 10, 5]} intensity={1} />
+                <StaticResult itemCount={Math.min(maxItems, 12)} />
+                <OrbitControls enableZoom enablePan enableRotate />
+              </Canvas>
+              <div className="absolute top-4 left-4 bg-white/90 px-3 py-2 rounded-md shadow-md">
+                <p className="text-sm font-medium">Optimized Loading: {Math.min(maxItems, 12)} Items</p>
+              </div>
+            </>
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
