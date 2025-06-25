@@ -1,4 +1,3 @@
-
 import { useRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -12,9 +11,14 @@ interface ThreeDViewerProps {
   maxItems: number;
 }
 
-const SimpleBox = ({ position, args, color }: { position: [number, number, number], args: [number, number, number], color: string }) => {
+const SimpleBox = ({ position, args, color, rotation = [0, 0, 0] }: { 
+  position: [number, number, number], 
+  args: [number, number, number], 
+  color: string,
+  rotation?: [number, number, number]
+}) => {
   return (
-    <mesh position={position}>
+    <mesh position={position} rotation={rotation}>
       <boxGeometry args={args} />
       <meshStandardMaterial color={color} />
     </mesh>
@@ -30,92 +34,168 @@ const WireframeBox = ({ position, args }: { position: [number, number, number], 
   );
 };
 
-// Calculate maximum items that can fit in the container
-const calculateMaxFittableItems = () => {
-  const containerDimensions = [6, 4, 3]; // [length, width, height]
-  const itemDimensions = [1.2, 0.6, 0.8]; // [length, width, height]
+interface PlacedItem {
+  position: [number, number, number];
+  dimensions: [number, number, number];
+  rotation: [number, number, number];
+  rotated: boolean;
+}
+
+// Advanced bin packing algorithm with rotation
+const optimizedBinPacking = (containerDims: [number, number, number], itemDims: [number, number, number]) => {
+  const [containerX, containerY, containerZ] = containerDims;
+  const [itemX, itemY, itemZ] = itemDims;
   
-  const itemsX = Math.floor(containerDimensions[0] / itemDimensions[0]);
-  const itemsY = Math.floor(containerDimensions[1] / itemDimensions[1]);
-  const itemsZ = Math.floor(containerDimensions[2] / itemDimensions[2]);
-  
-  return itemsX * itemsY * itemsZ;
+  const placedItems: PlacedItem[] = [];
+  const occupiedSpaces: Array<{
+    x: number, y: number, z: number,
+    width: number, height: number, depth: number
+  }> = [];
+
+  // Generate all possible rotations of the item
+  const rotations = [
+    { dims: [itemX, itemY, itemZ], rotation: [0, 0, 0], rotated: false },
+    { dims: [itemY, itemX, itemZ], rotation: [0, 0, Math.PI/2], rotated: true },
+    { dims: [itemZ, itemY, itemX], rotation: [Math.PI/2, 0, 0], rotated: true },
+    { dims: [itemX, itemZ, itemY], rotation: [0, Math.PI/2, 0], rotated: true },
+    { dims: [itemY, itemZ, itemX], rotation: [Math.PI/2, 0, Math.PI/2], rotated: true },
+    { dims: [itemZ, itemX, itemY], rotation: [0, Math.PI/2, Math.PI/2], rotated: true },
+  ];
+
+  const isSpaceOccupied = (x: number, y: number, z: number, w: number, h: number, d: number) => {
+    return occupiedSpaces.some(space => !(
+      x >= space.x + space.width ||
+      x + w <= space.x ||
+      y >= space.y + space.height ||
+      y + h <= space.y ||
+      z >= space.z + space.depth ||
+      z + d <= space.z
+    ));
+  };
+
+  const canPlaceItem = (x: number, y: number, z: number, dims: [number, number, number]) => {
+    const [w, h, d] = dims;
+    return x + w <= containerX && 
+           y + h <= containerY && 
+           z + d <= containerZ &&
+           !isSpaceOccupied(x, y, z, w, h, d);
+  };
+
+  // Try to place items using a more sophisticated approach
+  const step = 0.1; // Smaller step for more precise placement
+  let maxItems = 0;
+  let bestArrangement: PlacedItem[] = [];
+
+  // Try multiple packing strategies
+  for (let strategy = 0; strategy < 3; strategy++) {
+    const currentPlacement: PlacedItem[] = [];
+    const currentOccupied: typeof occupiedSpaces = [];
+    
+    for (let z = 0; z < containerZ; z += step) {
+      for (let y = 0; y < containerY; y += step) {
+        for (let x = 0; x < containerX; x += step) {
+          let placed = false;
+          
+          // Try each rotation
+          for (const rotation of rotations) {
+            const [w, h, d] = rotation.dims;
+            
+            // Check if this rotation fits
+            if (x + w <= containerX && y + h <= containerY && z + d <= containerZ) {
+              // Check if space is available
+              const isOccupied = currentOccupied.some(space => !(
+                x >= space.x + space.width ||
+                x + w <= space.x ||
+                y >= space.y + space.height ||
+                y + h <= space.y ||
+                z >= space.z + space.depth ||
+                z + d <= space.z
+              ));
+              
+              if (!isOccupied) {
+                currentPlacement.push({
+                  position: [x + w/2 - containerX/2, y + h/2 - containerY/2, z + d/2 - containerZ/2],
+                  dimensions: rotation.dims,
+                  rotation: rotation.rotation as [number, number, number],
+                  rotated: rotation.rotated
+                });
+                
+                currentOccupied.push({
+                  x, y, z, width: w, height: h, depth: d
+                });
+                
+                placed = true;
+                break;
+              }
+            }
+          }
+          
+          if (placed && currentPlacement.length >= 200) break; // Limit for performance
+        }
+        if (currentPlacement.length >= 200) break;
+      }
+      if (currentPlacement.length >= 200) break;
+    }
+    
+    if (currentPlacement.length > maxItems) {
+      maxItems = currentPlacement.length;
+      bestArrangement = [...currentPlacement];
+    }
+  }
+
+  return bestArrangement;
 };
 
 const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   const [currentItem, setCurrentItem] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
 
   useEffect(() => {
-    if (!isPlaying || currentItem >= itemCount) return;
+    // Calculate optimal arrangement
+    const containerDims: [number, number, number] = [6, 4, 3];
+    const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
+    const arrangement = optimizedBinPacking(containerDims, itemDims);
+    setPlacedItems(arrangement.slice(0, itemCount));
+  }, [itemCount]);
+
+  useEffect(() => {
+    if (currentItem >= placedItems.length) return;
 
     const timer = setTimeout(() => {
-      setCurrentItem(prev => Math.min(prev + 1, itemCount));
-    }, 300); // Faster animation for more items
+      setCurrentItem(prev => Math.min(prev + 1, placedItems.length));
+    }, 150); // Faster animation
 
     return () => clearTimeout(timer);
-  }, [currentItem, itemCount, isPlaying]);
-
-  // Calculate positions to fit within container (6x4x3)
-  // Container bounds: x: -3 to 3, y: -2 to 2, z: -1.5 to 1.5
-  // Box size: 1.2x0.6x0.8
-  const getPosition = (index: number): [number, number, number] => {
-    const itemsPerX = Math.floor(6 / 1.2); // 5 items
-    const itemsPerY = Math.floor(4 / 0.6); // 6 items  
-    const itemsPerZ = Math.floor(3 / 0.8); // 3 items
-    
-    const layer = Math.floor(index / (itemsPerX * itemsPerY));
-    const indexInLayer = index % (itemsPerX * itemsPerY);
-    const row = Math.floor(indexInLayer / itemsPerX);
-    const col = indexInLayer % itemsPerX;
-    
-    const x = -2.4 + (col * 1.2); // Start from left edge
-    const y = -1.8 + (row * 0.6); // Start from bottom
-    const z = -1.2 + (layer * 0.8); // Start from front
-    
-    return [x, y, z];
-  };
+  }, [currentItem, placedItems.length]);
 
   return (
     <>
-      {/* Container/Carton outline */}
+      {/* Container outline */}
       <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
 
       {/* Items being loaded */}
-      {Array.from({ length: currentItem }).map((_, index) => {
-        const position = getPosition(index);
-
-        return (
-          <SimpleBox
-            key={index}
-            position={position}
-            args={[1.2, 0.6, 0.8]}
-            color={`hsl(${index * 15}, 70%, 60%)`}
-          />
-        );
-      })}
+      {placedItems.slice(0, currentItem).map((item, index) => (
+        <SimpleBox
+          key={index}
+          position={item.position}
+          args={item.dimensions}
+          rotation={item.rotation}
+          color={item.rotated ? `hsl(${(index * 25) % 360}, 80%, 60%)` : `hsl(${(index * 15) % 360}, 70%, 60%)`}
+        />
+      ))}
     </>
   );
 };
 
 const StaticResult = ({ itemCount }: { itemCount: number }) => {
-  // Same positioning logic as LoadingAnimation
-  const getPosition = (index: number): [number, number, number] => {
-    const itemsPerX = Math.floor(6 / 1.2); // 5 items
-    const itemsPerY = Math.floor(4 / 0.6); // 6 items  
-    const itemsPerZ = Math.floor(3 / 0.8); // 3 items
-    
-    const layer = Math.floor(index / (itemsPerX * itemsPerY));
-    const indexInLayer = index % (itemsPerX * itemsPerY);
-    const row = Math.floor(indexInLayer / itemsPerX);
-    const col = indexInLayer % itemsPerX;
-    
-    const x = -2.4 + (col * 1.2); // Start from left edge
-    const y = -1.8 + (row * 0.6); // Start from bottom
-    const z = -1.2 + (layer * 0.8); // Start from front
-    
-    return [x, y, z];
-  };
+  const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
+
+  useEffect(() => {
+    const containerDims: [number, number, number] = [6, 4, 3];
+    const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
+    const arrangement = optimizedBinPacking(containerDims, itemDims);
+    setPlacedItems(arrangement.slice(0, itemCount));
+  }, [itemCount]);
 
   return (
     <>
@@ -123,36 +203,38 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
       <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
 
       {/* All items loaded */}
-      {Array.from({ length: itemCount }).map((_, index) => {
-        const position = getPosition(index);
-
-        return (
-          <SimpleBox
-            key={index}
-            position={position}
-            args={[1.2, 0.6, 0.8]}
-            color={`hsl(${index * 15}, 70%, 60%)`}
-          />
-        );
-      })}
+      {placedItems.map((item, index) => (
+        <SimpleBox
+          key={index}
+          position={item.position}
+          args={item.dimensions}
+          rotation={item.rotation}
+          color={item.rotated ? `hsl(${(index * 25) % 360}, 80%, 60%)` : `hsl(${(index * 15) % 360}, 70%, 60%)`}
+        />
+      ))}
     </>
   );
+};
+
+const calculateMaxOptimizedItems = () => {
+  const containerDims: [number, number, number] = [6, 4, 3];
+  const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
+  const arrangement = optimizedBinPacking(containerDims, itemDims);
+  return arrangement.length;
 };
 
 const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) => {
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
   
-  // Calculate the actual maximum items that can fit, regardless of input maxItems
-  const maxFittableItems = calculateMaxFittableItems();
-  const actualMaxItems = Math.min(maxItems, maxFittableItems);
+  const optimizedMaxItems = calculateMaxOptimizedItems();
+  const actualMaxItems = Math.min(maxItems, optimizedMaxItems);
 
   useEffect(() => {
     if (showResult && !isLoading) {
-      // Show loading animation first, then static result
       setShowLoadingAnimation(true);
       const timer = setTimeout(() => {
         setShowLoadingAnimation(false);
-      }, actualMaxItems * 300 + 1000); // Animation duration + 1 second buffer
+      }, actualMaxItems * 150 + 1000);
 
       return () => clearTimeout(timer);
     }
@@ -167,7 +249,7 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
               <div className="text-center">
                 <Loader2 className="animate-spin mx-auto mb-4" size={40} />
                 <p className="text-lg font-medium">Calculating optimal arrangement...</p>
-                <p className="text-sm text-gray-600">This may take a few moments</p>
+                <p className="text-sm text-gray-600">Optimizing with rotations for maximum efficiency</p>
               </div>
             </div>
           ) : showResult ? (
@@ -184,10 +266,13 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
               </Canvas>
               <div className="absolute top-4 left-4 bg-white/90 px-3 py-2 rounded-md shadow-md">
                 <p className="text-sm font-medium">
-                  {showLoadingAnimation ? 'Loading Items...' : `Optimized Loading: ${actualMaxItems} Items`}
+                  {showLoadingAnimation ? 'Optimizing Loading...' : `Optimized: ${actualMaxItems} Items`}
                 </p>
                 <p className="text-xs text-gray-600">
-                  Max capacity: {maxFittableItems} items
+                  Max capacity: {optimizedMaxItems} items (with rotations)
+                </p>
+                <p className="text-xs text-blue-600">
+                  🔄 Rotated items shown in brighter colors
                 </p>
               </div>
             </>
