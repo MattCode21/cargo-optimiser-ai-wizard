@@ -3,13 +3,23 @@ import { useRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, RotateCcw, Maximize } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import * as THREE from 'three';
+import { getOptimalBinPacking, calculateSpaceUtilization } from '@/utils/advancedBinPacking';
 
 interface ThreeDViewerProps {
   isLoading: boolean;
   showResult: boolean;
   maxItems: number;
+}
+
+interface PlacedItem {
+  position: [number, number, number];
+  dimensions: [number, number, number];
+  rotation: [number, number, number];
+  rotated: boolean;
 }
 
 const SimpleBox = ({ position, args, color, rotation = [0, 0, 0] }: { 
@@ -21,7 +31,7 @@ const SimpleBox = ({ position, args, color, rotation = [0, 0, 0] }: {
   return (
     <mesh position={position} rotation={rotation}>
       <boxGeometry args={args} />
-      <meshStandardMaterial color={color} />
+      <meshStandardMaterial color={color} transparent opacity={0.9} />
     </mesh>
   );
 };
@@ -30,204 +40,9 @@ const WireframeBox = ({ position, args }: { position: [number, number, number], 
   return (
     <mesh position={position}>
       <boxGeometry args={args} />
-      <meshBasicMaterial wireframe color="#444" />
+      <meshBasicMaterial wireframe color="#666" linewidth={2} />
     </mesh>
   );
-};
-
-interface PlacedItem {
-  position: [number, number, number];
-  dimensions: [number, number, number];
-  rotation: [number, number, number];
-  rotated: boolean;
-}
-
-interface Space {
-  x: number;
-  y: number;
-  z: number;
-  width: number;
-  height: number;
-  depth: number;
-}
-
-// Advanced Bottom-Left-Fill (BLF) bin packing with rotation optimization
-const advancedBinPacking = (containerDims: [number, number, number], itemDims: [number, number, number]) => {
-  const [containerX, containerY, containerZ] = containerDims;
-  const [itemX, itemY, itemZ] = itemDims;
-  
-  const placedItems: PlacedItem[] = [];
-  const emptySpaces: Space[] = [
-    { x: 0, y: 0, z: 0, width: containerX, height: containerY, depth: containerZ }
-  ];
-
-  // All possible orientations of the item
-  const orientations = [
-    { dims: [itemX, itemY, itemZ] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], rotated: false },
-    { dims: [itemY, itemX, itemZ] as [number, number, number], rotation: [0, 0, Math.PI/2] as [number, number, number], rotated: true },
-    { dims: [itemZ, itemY, itemX] as [number, number, number], rotation: [Math.PI/2, 0, 0] as [number, number, number], rotated: true },
-    { dims: [itemX, itemZ, itemY] as [number, number, number], rotation: [0, Math.PI/2, 0] as [number, number, number], rotated: true },
-    { dims: [itemY, itemZ, itemX] as [number, number, number], rotation: [Math.PI/2, 0, Math.PI/2] as [number, number, number], rotated: true },
-    { dims: [itemZ, itemX, itemY] as [number, number, number], rotation: [0, Math.PI/2, Math.PI/2] as [number, number, number], rotated: true },
-  ];
-
-  const findBestFit = (space: Space) => {
-    let bestFit = null;
-    let bestScore = -1;
-
-    for (const orientation of orientations) {
-      const [w, h, d] = orientation.dims;
-      
-      if (w <= space.width && h <= space.height && d <= space.depth) {
-        // Scoring function prioritizes tighter fits and bottom-left placement
-        const volumeScore = (w * h * d) / (space.width * space.height * space.depth);
-        const positionScore = 1 / (1 + space.x + space.y + space.z);
-        const wasteScore = 1 - ((space.width - w) + (space.height - h) + (space.depth - d)) / 
-                             (space.width + space.height + space.depth);
-        
-        const totalScore = volumeScore * 0.5 + positionScore * 0.3 + wasteScore * 0.2;
-        
-        if (totalScore > bestScore) {
-          bestScore = totalScore;
-          bestFit = {
-            orientation,
-            space,
-            score: totalScore
-          };
-        }
-      }
-    }
-
-    return bestFit;
-  };
-
-  const splitSpace = (space: Space, placedItem: { x: number, y: number, z: number, w: number, h: number, d: number }) => {
-    const newSpaces: Space[] = [];
-    
-    // Right space
-    if (space.x + placedItem.w < space.x + space.width) {
-      newSpaces.push({
-        x: space.x + placedItem.w,
-        y: space.y,
-        z: space.z,
-        width: space.width - placedItem.w,
-        height: space.height,
-        depth: space.depth
-      });
-    }
-    
-    // Top space
-    if (space.y + placedItem.h < space.y + space.height) {
-      newSpaces.push({
-        x: space.x,
-        y: space.y + placedItem.h,
-        z: space.z,
-        width: placedItem.w,
-        height: space.height - placedItem.h,
-        depth: space.depth
-      });
-    }
-    
-    // Front space
-    if (space.z + placedItem.d < space.z + space.depth) {
-      newSpaces.push({
-        x: space.x,
-        y: space.y,
-        z: space.z + placedItem.d,
-        width: placedItem.w,
-        height: placedItem.h,
-        depth: space.depth - placedItem.d
-      });
-    }
-
-    return newSpaces;
-  };
-
-  const removeOverlappingSpaces = (spaces: Space[]) => {
-    return spaces.filter((space, index) => {
-      for (let i = 0; i < spaces.length; i++) {
-        if (i === index) continue;
-        const other = spaces[i];
-        
-        // Check if space is completely contained within another space
-        if (space.x >= other.x && space.y >= other.y && space.z >= other.z &&
-            space.x + space.width <= other.x + other.width &&
-            space.y + space.height <= other.y + other.height &&
-            space.z + space.depth <= other.z + other.depth) {
-          return false;
-        }
-      }
-      return true;
-    });
-  };
-
-  let iterations = 0;
-  const maxIterations = 1000;
-
-  while (emptySpaces.length > 0 && iterations < maxIterations) {
-    iterations++;
-    
-    // Sort spaces by bottom-left-front priority
-    emptySpaces.sort((a, b) => {
-      if (a.y !== b.y) return a.y - b.y;
-      if (a.x !== b.x) return a.x - b.x;
-      return a.z - b.z;
-    });
-
-    let bestPlacement = null;
-    let bestSpaceIndex = -1;
-
-    // Find the best placement among all available spaces
-    for (let i = 0; i < emptySpaces.length; i++) {
-      const fit = findBestFit(emptySpaces[i]);
-      if (fit && (!bestPlacement || fit.score > bestPlacement.score)) {
-        bestPlacement = fit;
-        bestSpaceIndex = i;
-      }
-    }
-
-    if (!bestPlacement) break;
-
-    const space = bestPlacement.space;
-    const orientation = bestPlacement.orientation;
-    const [w, h, d] = orientation.dims;
-
-    // Place the item
-    placedItems.push({
-      position: [
-        space.x + w/2 - containerX/2,
-        space.y + h/2 - containerY/2,
-        space.z + d/2 - containerZ/2
-      ],
-      dimensions: orientation.dims,
-      rotation: orientation.rotation,
-      rotated: orientation.rotated
-    });
-
-    // Remove the used space
-    emptySpaces.splice(bestSpaceIndex, 1);
-
-    // Split the space and add new empty spaces
-    const newSpaces = splitSpace(space, { x: space.x, y: space.y, z: space.z, w, h, d });
-    emptySpaces.push(...newSpaces);
-
-    // Remove overlapping and redundant spaces
-    const cleanedSpaces = removeOverlappingSpaces(emptySpaces);
-    emptySpaces.length = 0;
-    emptySpaces.push(...cleanedSpaces);
-
-    // Remove spaces that are too small for any orientation
-    const minDim = Math.min(itemX, itemY, itemZ);
-    for (let i = emptySpaces.length - 1; i >= 0; i--) {
-      const space = emptySpaces[i];
-      if (space.width < minDim && space.height < minDim && space.depth < minDim) {
-        emptySpaces.splice(i, 1);
-      }
-    }
-  }
-
-  console.log(`Packed ${placedItems.length} items in ${iterations} iterations`);
-  return placedItems;
 };
 
 const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
@@ -237,7 +52,7 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   useEffect(() => {
     const containerDims: [number, number, number] = [6, 4, 3];
     const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-    const arrangement = advancedBinPacking(containerDims, itemDims);
+    const arrangement = getOptimalBinPacking(containerDims, itemDims);
     setPlacedItems(arrangement.slice(0, itemCount));
   }, [itemCount]);
 
@@ -246,7 +61,7 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
 
     const timer = setTimeout(() => {
       setCurrentItem(prev => Math.min(prev + 1, placedItems.length));
-    }, 100);
+    }, 80);
 
     return () => clearTimeout(timer);
   }, [currentItem, placedItems.length]);
@@ -260,7 +75,10 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
           position={item.position}
           args={item.dimensions}
           rotation={item.rotation}
-          color={item.rotated ? `hsl(${(index * 25) % 360}, 85%, 65%)` : `hsl(${(index * 15) % 360}, 70%, 55%)`}
+          color={item.rotated ? 
+            `hsl(${(index * 30 + 180) % 360}, 90%, 65%)` : 
+            `hsl(${(index * 25) % 360}, 75%, 55%)`
+          }
         />
       ))}
     </>
@@ -269,12 +87,15 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
 
 const StaticResult = ({ itemCount }: { itemCount: number }) => {
   const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
+  const [spaceUtilization, setSpaceUtilization] = useState(0);
 
   useEffect(() => {
     const containerDims: [number, number, number] = [6, 4, 3];
     const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-    const arrangement = advancedBinPacking(containerDims, itemDims);
-    setPlacedItems(arrangement.slice(0, itemCount));
+    const arrangement = getOptimalBinPacking(containerDims, itemDims);
+    const actualItems = arrangement.slice(0, itemCount);
+    setPlacedItems(actualItems);
+    setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems));
   }, [itemCount]);
 
   return (
@@ -286,24 +107,29 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
           position={item.position}
           args={item.dimensions}
           rotation={item.rotation}
-          color={item.rotated ? `hsl(${(index * 25) % 360}, 85%, 65%)` : `hsl(${(index * 15) % 360}, 70%, 55%)`}
+          color={item.rotated ? 
+            `hsl(${(index * 30 + 180) % 360}, 90%, 65%)` : 
+            `hsl(${(index * 25) % 360}, 75%, 55%)`
+          }
         />
       ))}
     </>
   );
 };
 
-const calculateMaxOptimizedItems = () => {
+const getMaxOptimizedItems = () => {
   const containerDims: [number, number, number] = [6, 4, 3];
   const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-  const arrangement = advancedBinPacking(containerDims, itemDims);
+  const arrangement = getOptimalBinPacking(containerDims, itemDims);
   return arrangement.length;
 };
 
 const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) => {
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
+  const [spaceUtilization, setSpaceUtilization] = useState(0);
+  const [resetKey, setResetKey] = useState(0);
   
-  const optimizedMaxItems = calculateMaxOptimizedItems();
+  const optimizedMaxItems = getMaxOptimizedItems();
   const actualMaxItems = Math.min(maxItems, optimizedMaxItems);
 
   useEffect(() => {
@@ -311,55 +137,109 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
       setShowLoadingAnimation(true);
       const timer = setTimeout(() => {
         setShowLoadingAnimation(false);
-      }, actualMaxItems * 100 + 1000);
+        // Calculate actual space utilization
+        const containerDims: [number, number, number] = [6, 4, 3];
+        const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
+        const arrangement = getOptimalBinPacking(containerDims, itemDims);
+        const actualItems = arrangement.slice(0, actualMaxItems);
+        setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems));
+      }, actualMaxItems * 80 + 1000);
 
       return () => clearTimeout(timer);
     }
   }, [showResult, isLoading, actualMaxItems]);
 
+  const handleReset = () => {
+    setResetKey(prev => prev + 1);
+    setShowLoadingAnimation(false);
+    setSpaceUtilization(0);
+  };
+
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardContent className="p-0">
-        <div className="h-96 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg overflow-hidden relative">
+        <div className="h-96 bg-gradient-to-br from-slate-100 to-blue-100 dark:from-slate-900 dark:to-blue-900 rounded-lg overflow-hidden relative">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
-                <Loader2 className="animate-spin mx-auto mb-4" size={40} />
-                <p className="text-lg font-medium">Calculating optimal arrangement...</p>
-                <p className="text-sm text-gray-600">Advanced BLF algorithm with 6-way rotation optimization</p>
+                <Loader2 className="animate-spin mx-auto mb-4 text-blue-600" size={40} />
+                <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Optimizing placement...</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Advanced multi-orientation bin packing</p>
               </div>
             </div>
           ) : showResult ? (
             <>
-              <Canvas camera={{ position: [8, 6, 8], fov: 50 }}>
-                <ambientLight intensity={0.6} />
-                <directionalLight position={[10, 10, 5]} intensity={1} />
+              <Canvas 
+                key={resetKey} 
+                camera={{ position: [8, 6, 8], fov: 50 }}
+                className="bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-800"
+              >
+                <ambientLight intensity={0.7} />
+                <directionalLight position={[10, 10, 5]} intensity={1.2} />
+                <spotLight position={[0, 10, 0]} intensity={0.5} />
                 {showLoadingAnimation ? (
                   <LoadingAnimation itemCount={actualMaxItems} />
                 ) : (
                   <StaticResult itemCount={actualMaxItems} />
                 )}
-                <OrbitControls enableZoom enablePan enableRotate />
+                <OrbitControls 
+                  enableZoom 
+                  enablePan 
+                  enableRotate 
+                  autoRotate={false}
+                  maxDistance={15}
+                  minDistance={3}
+                />
               </Canvas>
-              <div className="absolute top-4 left-4 bg-white/90 px-3 py-2 rounded-md shadow-md">
-                <p className="text-sm font-medium">
-                  {showLoadingAnimation ? 'Advanced BLF Packing...' : `Optimized: ${actualMaxItems} Items`}
-                </p>
-                <p className="text-xs text-gray-600">
-                  Max capacity: {optimizedMaxItems} items (BLF + rotations)
-                </p>
-                <p className="text-xs text-blue-600">
-                  🔄 Rotated items shown in brighter colors
-                </p>
+              
+              <div className="absolute top-4 left-4 space-y-2">
+                <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-4 py-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Maximize className="h-4 w-4 text-blue-600" />
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {showLoadingAnimation ? 'Optimizing...' : `${actualMaxItems} Items Packed`}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Space Utilization: <span className="font-semibold text-green-600">{spaceUtilization}%</span>
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Max Capacity: {optimizedMaxItems} items
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    🔄 Bright = Rotated
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    📦 Multi-orientation
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="absolute top-4 right-4">
+                <Button 
+                  onClick={handleReset}
+                  variant="outline" 
+                  size="sm"
+                  className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm"
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  Reset View
+                </Button>
               </div>
             </>
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
-                <div className="w-16 h-16 bg-gray-300 rounded-lg mx-auto mb-4 flex items-center justify-center">
-                  <div className="w-8 h-8 bg-gray-400 rounded"></div>
+                <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 rounded-xl mx-auto mb-4 flex items-center justify-center shadow-lg">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-md"></div>
                 </div>
-                <p className="text-gray-600">3D visualization will appear here</p>
+                <p className="text-gray-600 dark:text-gray-400 font-medium">3D visualization will appear here</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">Start optimization to see results</p>
               </div>
             </div>
           )}
