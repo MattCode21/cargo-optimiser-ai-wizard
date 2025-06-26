@@ -1,11 +1,10 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, Calculator, Play, Image as ImageIcon } from "lucide-react";
+import { Upload, Calculator, Play, Image as ImageIcon, Box } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ImageUploader from "./ImageUploader";
 import ThreeDViewer from "./ThreeDViewer";
@@ -21,9 +20,11 @@ interface ProductData {
 }
 
 interface CartonData {
+  shape: string;
   length: number;
   width: number;
   height: number;
+  diameter?: number;
   maxWeight: number;
   unit: string;
 }
@@ -39,6 +40,7 @@ const MasterCartonTab = () => {
     unit: 'cm'
   });
   const [cartonData, setCartonData] = useState<CartonData>({
+    shape: 'rectangular',
     length: 0,
     width: 0,
     height: 0,
@@ -83,15 +85,160 @@ const MasterCartonTab = () => {
   const calculateMaxItems = () => {
     if (!productData.length || !cartonData.length) return 0;
     
-    const volumeConstraint = Math.floor(
-      (cartonData.length / productData.length) *
-      (cartonData.width / productData.width) *
-      (cartonData.height / productData.height)
-    );
+    let containerVolume = 0;
     
+    if (cartonData.shape === 'rectangular') {
+      containerVolume = cartonData.length * cartonData.width * cartonData.height;
+    } else if (cartonData.shape === 'cylindrical' && cartonData.diameter) {
+      const radius = cartonData.diameter / 2;
+      containerVolume = Math.PI * radius * radius * cartonData.height;
+    } else if (cartonData.shape === 'cubic') {
+      containerVolume = cartonData.length * cartonData.length * cartonData.length;
+    }
+    
+    const productVolume = productData.length * productData.width * productData.height;
+    const volumeConstraint = Math.floor(containerVolume / productVolume);
     const weightConstraint = Math.floor(cartonData.maxWeight / productData.weight);
     
     return Math.min(volumeConstraint, weightConstraint);
+  };
+
+  const renderCartonDimensionInputs = () => {
+    switch (cartonData.shape) {
+      case 'rectangular':
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <Label htmlFor="carton-length">Length</Label>
+              <Input
+                id="carton-length"
+                type="number"
+                value={cartonData.length || ''}
+                onChange={(e) => setCartonData(prev => ({ ...prev, length: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="carton-width">Width</Label>
+              <Input
+                id="carton-width"
+                type="number"
+                value={cartonData.width || ''}
+                onChange={(e) => setCartonData(prev => ({ ...prev, width: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="carton-height">Height</Label>
+              <Input
+                id="carton-height"
+                type="number"
+                value={cartonData.height || ''}
+                onChange={(e) => setCartonData(prev => ({ ...prev, height: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="carton-unit">Unit</Label>
+              <Select value={cartonData.unit} onValueChange={(value) => setCartonData(prev => ({ ...prev, unit: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mm">Millimeters</SelectItem>
+                  <SelectItem value="cm">Centimeters</SelectItem>
+                  <SelectItem value="in">Inches</SelectItem>
+                  <SelectItem value="ft">Feet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        );
+      
+      case 'cubic':
+        return (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="carton-side">Side Length</Label>
+              <Input
+                id="carton-side"
+                type="number"
+                value={cartonData.length || ''}
+                onChange={(e) => setCartonData(prev => ({ ...prev, length: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="carton-unit">Unit</Label>
+              <Select value={cartonData.unit} onValueChange={(value) => setCartonData(prev => ({ ...prev, unit: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mm">Millimeters</SelectItem>
+                  <SelectItem value="cm">Centimeters</SelectItem>
+                  <SelectItem value="in">Inches</SelectItem>
+                  <SelectItem value="ft">Feet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        );
+      
+      case 'cylindrical':
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="carton-diameter">Diameter</Label>
+              <Input
+                id="carton-diameter"
+                type="number"
+                value={cartonData.diameter || ''}
+                onChange={(e) => setCartonData(prev => ({ ...prev, diameter: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="carton-height">Height</Label>
+              <Input
+                id="carton-height"
+                type="number"
+                value={cartonData.height || ''}
+                onChange={(e) => setCartonData(prev => ({ ...prev, height: Number(e.target.value) }))}
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <Label htmlFor="carton-unit">Unit</Label>
+              <Select value={cartonData.unit} onValueChange={(value) => setCartonData(prev => ({ ...prev, unit: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mm">Millimeters</SelectItem>
+                  <SelectItem value="cm">Centimeters</SelectItem>
+                  <SelectItem value="in">Inches</SelectItem>
+                  <SelectItem value="ft">Feet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  const isCartonDataValid = () => {
+    if (cartonData.shape === 'rectangular') {
+      return cartonData.length && cartonData.width && cartonData.height && cartonData.maxWeight;
+    } else if (cartonData.shape === 'cubic') {
+      return cartonData.length && cartonData.maxWeight;
+    } else if (cartonData.shape === 'cylindrical') {
+      return cartonData.diameter && cartonData.height && cartonData.maxWeight;
+    }
+    return false;
   };
 
   return (
@@ -218,58 +365,41 @@ const MasterCartonTab = () => {
       {step === 3 && (
         <Card>
           <CardHeader>
-            <CardTitle>Step 3: Master Carton Specifications</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Box size={24} />
+              Step 3: Master Carton Specifications
+            </CardTitle>
             <CardDescription>
-              Enter the dimensions and maximum weight capacity of the master carton.
+              Select the shape and enter the dimensions of the master carton.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <Label htmlFor="carton-length">Length</Label>
-                <Input
-                  id="carton-length"
-                  type="number"
-                  value={cartonData.length || ''}
-                  onChange={(e) => setCartonData(prev => ({ ...prev, length: Number(e.target.value) }))}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label htmlFor="carton-width">Width</Label>
-                <Input
-                  id="carton-width"
-                  type="number"
-                  value={cartonData.width || ''}
-                  onChange={(e) => setCartonData(prev => ({ ...prev, width: Number(e.target.value) }))}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label htmlFor="carton-height">Height</Label>
-                <Input
-                  id="carton-height"
-                  type="number"
-                  value={cartonData.height || ''}
-                  onChange={(e) => setCartonData(prev => ({ ...prev, height: Number(e.target.value) }))}
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label htmlFor="carton-unit">Unit</Label>
-                <Select value={cartonData.unit} onValueChange={(value) => setCartonData(prev => ({ ...prev, unit: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mm">Millimeters</SelectItem>
-                    <SelectItem value="cm">Centimeters</SelectItem>
-                    <SelectItem value="in">Inches</SelectItem>
-                    <SelectItem value="ft">Feet</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label htmlFor="carton-shape">Master Carton Shape</Label>
+              <Select 
+                value={cartonData.shape} 
+                onValueChange={(value) => setCartonData(prev => ({ 
+                  ...prev, 
+                  shape: value,
+                  // Reset dimensions when shape changes
+                  length: 0,
+                  width: 0,
+                  height: 0,
+                  diameter: undefined
+                }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rectangular">Rectangular Box</SelectItem>
+                  <SelectItem value="cubic">Cubic Box</SelectItem>
+                  <SelectItem value="cylindrical">Cylindrical Container</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {renderCartonDimensionInputs()}
             
             <div>
               <Label htmlFor="max-weight">Maximum Weight Capacity</Label>
@@ -286,7 +416,7 @@ const MasterCartonTab = () => {
               <h4 className="font-semibold text-blue-900 mb-2">Calculated Maximum Items:</h4>
               <p className="text-2xl font-bold text-blue-700">{calculateMaxItems()} products</p>
               <p className="text-sm text-blue-600 mt-1">
-                Based on volume and weight constraints
+                Based on {cartonData.shape} container volume and weight constraints
               </p>
             </div>
 
@@ -294,7 +424,7 @@ const MasterCartonTab = () => {
               <Button variant="outline" onClick={() => setStep(2)}>
                 Back
               </Button>
-              <Button onClick={() => setStep(4)} disabled={!cartonData.length || !cartonData.maxWeight}>
+              <Button onClick={() => setStep(4)} disabled={!isCartonDataValid()}>
                 Generate 3D Visualization
               </Button>
             </div>
