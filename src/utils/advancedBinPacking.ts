@@ -28,6 +28,10 @@ export const getOptimalBinPacking = (
   const [containerX, containerY, containerZ] = containerDims;
   const [itemX, itemY, itemZ] = itemDims;
   
+  // Calculate theoretical maximum first to limit our attempts
+  const theoreticalMax = Math.floor((containerX * containerY * containerZ) / (itemX * itemY * itemZ));
+  console.log(`Theoretical maximum items: ${theoreticalMax}`);
+  
   const placedItems: PlacedItem[] = [];
   const emptySpaces: Space[] = [
     { x: 0, y: 0, z: 0, width: containerX, height: containerY, depth: containerZ }
@@ -45,7 +49,16 @@ export const getOptimalBinPacking = (
 
   const canFit = (space: Space, dims: [number, number, number]): boolean => {
     const [w, h, d] = dims;
-    return w <= space.width && h <= space.height && d <= space.depth;
+    // Add small tolerance to prevent floating point errors
+    return w <= (space.width + 0.001) && h <= (space.height + 0.001) && d <= (space.depth + 0.001);
+  };
+
+  const isValidPosition = (item: { x: number, y: number, z: number, w: number, h: number, d: number }): boolean => {
+    // Ensure item doesn't exceed container boundaries
+    return item.x >= 0 && item.y >= 0 && item.z >= 0 &&
+           (item.x + item.w) <= containerX &&
+           (item.y + item.h) <= containerY &&
+           (item.z + item.d) <= containerZ;
   };
 
   const findBestFitInSpace = (space: Space): { orientation: Orientation; score: number } | null => {
@@ -56,17 +69,12 @@ export const getOptimalBinPacking = (
       if (canFit(space, orientation.dims)) {
         const [w, h, d] = orientation.dims;
         
-        // Multi-criteria scoring for optimal placement
+        // Prioritize tight fits and corner positions
         const volumeEfficiency = (w * h * d) / (space.width * space.height * space.depth);
-        const wasteMinimization = 1 - ((space.width - w) + (space.height - h) + (space.depth - d)) / 
-                                     (space.width + space.height + space.depth);
+        const tightnessFactor = (w / space.width) + (h / space.height) + (d / space.depth);
         const cornerPreference = 1 / (1 + space.x + space.y + space.z);
-        const dimensionMatch = (w === space.width ? 0.3 : 0) + 
-                              (h === space.height ? 0.3 : 0) + 
-                              (d === space.depth ? 0.3 : 0);
         
-        const totalScore = volumeEfficiency * 0.4 + wasteMinimization * 0.3 + 
-                          cornerPreference * 0.2 + dimensionMatch * 0.1;
+        const totalScore = volumeEfficiency * 0.5 + tightnessFactor * 0.3 + cornerPreference * 0.2;
         
         if (totalScore > bestScore) {
           bestScore = totalScore;
@@ -81,88 +89,58 @@ export const getOptimalBinPacking = (
   const splitSpace = (space: Space, item: { x: number, y: number, z: number, w: number, h: number, d: number }): Space[] => {
     const newSpaces: Space[] = [];
     
-    // Generate all possible splits to maximize space utilization
-    
     // Right space (along X-axis)
     if (space.x + item.w < space.x + space.width) {
-      newSpaces.push({
+      const rightSpace = {
         x: space.x + item.w,
         y: space.y,
         z: space.z,
         width: space.width - item.w,
         height: space.height,
         depth: space.depth
-      });
+      };
+      if (rightSpace.width > 0 && rightSpace.height > 0 && rightSpace.depth > 0) {
+        newSpaces.push(rightSpace);
+      }
     }
     
     // Top space (along Y-axis)
     if (space.y + item.h < space.y + space.height) {
-      newSpaces.push({
+      const topSpace = {
         x: space.x,
         y: space.y + item.h,
         z: space.z,
         width: item.w,
         height: space.height - item.h,
         depth: space.depth
-      });
+      };
+      if (topSpace.width > 0 && topSpace.height > 0 && topSpace.depth > 0) {
+        newSpaces.push(topSpace);
+      }
     }
     
     // Front space (along Z-axis)
     if (space.z + item.d < space.z + space.depth) {
-      newSpaces.push({
+      const frontSpace = {
         x: space.x,
         y: space.y,
         z: space.z + item.d,
         width: item.w,
         height: item.h,
         depth: space.depth - item.d
-      });
-    }
-
-    // Additional splits for better space utilization
-    
-    // Corner spaces
-    if (space.x + item.w < space.x + space.width && space.y + item.h < space.y + space.height) {
-      newSpaces.push({
-        x: space.x + item.w,
-        y: space.y + item.h,
-        z: space.z,
-        width: space.width - item.w,
-        height: space.height - item.h,
-        depth: item.d
-      });
-    }
-
-    if (space.x + item.w < space.x + space.width && space.z + item.d < space.z + space.depth) {
-      newSpaces.push({
-        x: space.x + item.w,
-        y: space.y,
-        z: space.z + item.d,
-        width: space.width - item.w,
-        height: item.h,
-        depth: space.depth - item.d
-      });
-    }
-
-    if (space.y + item.h < space.y + space.height && space.z + item.d < space.z + space.depth) {
-      newSpaces.push({
-        x: space.x,
-        y: space.y + item.h,
-        z: space.z + item.d,
-        width: item.w,
-        height: space.height - item.h,
-        depth: space.depth - item.d
-      });
+      };
+      if (frontSpace.width > 0 && frontSpace.height > 0 && frontSpace.depth > 0) {
+        newSpaces.push(frontSpace);
+      }
     }
 
     return newSpaces;
   };
 
   const cleanupSpaces = (spaces: Space[]): Space[] => {
-    // Remove duplicate and contained spaces
     return spaces.filter((space, index) => {
-      // Check if this space is valid (positive dimensions)
-      if (space.width <= 0 || space.height <= 0 || space.depth <= 0) return false;
+      // Check if this space is valid (positive dimensions with minimum threshold)
+      if (space.width < 0.01 || space.height < 0.01 || space.depth < 0.01) return false;
       
       // Check if space can fit at least one item in any orientation
       const canFitAnyOrientation = orientations.some(orientation => 
@@ -187,23 +165,22 @@ export const getOptimalBinPacking = (
   };
 
   let iterations = 0;
-  const maxIterations = 2000; // Increased for better optimization
+  const maxIterations = theoreticalMax * 10; // Reasonable limit based on theoretical max
 
-  while (emptySpaces.length > 0 && iterations < maxIterations) {
+  while (emptySpaces.length > 0 && iterations < maxIterations && placedItems.length < theoreticalMax) {
     iterations++;
     
-    // Sort spaces by priority: bottom-left-front first, then by volume
+    // Sort spaces by priority: bottom-left-front first
     emptySpaces.sort((a, b) => {
-      const priorityA = a.y * 1000000 + a.x * 1000 + a.z;
-      const priorityB = b.y * 1000000 + b.x * 1000 + b.z;
-      if (priorityA !== priorityB) return priorityA - priorityB;
-      return (b.width * b.height * b.depth) - (a.width * a.height * a.depth);
+      if (a.y !== b.y) return a.y - b.y;
+      if (a.x !== b.x) return a.x - b.x;
+      return a.z - b.z;
     });
 
     let bestPlacement = null;
     let bestSpaceIndex = -1;
 
-    // Find the absolute best placement across all spaces
+    // Find the best placement across all spaces
     for (let i = 0; i < emptySpaces.length; i++) {
       const fit = findBestFitInSpace(emptySpaces[i]);
       if (fit && (!bestPlacement || fit.score > bestPlacement.score)) {
@@ -218,7 +195,17 @@ export const getOptimalBinPacking = (
     const orientation = bestPlacement.orientation;
     const [w, h, d] = orientation.dims;
 
-    // Place the item
+    // Validate the item position
+    const itemPlacement = { 
+      x: space.x, y: space.y, z: space.z, w, h, d 
+    };
+    
+    if (!isValidPosition(itemPlacement)) {
+      emptySpaces.splice(bestSpaceIndex, 1);
+      continue;
+    }
+
+    // Place the item - center it within the space for visualization
     placedItems.push({
       position: [
         space.x + w/2 - containerX/2,
@@ -234,22 +221,20 @@ export const getOptimalBinPacking = (
     emptySpaces.splice(bestSpaceIndex, 1);
 
     // Create new spaces from the split
-    const newSpaces = splitSpace(space, { 
-      x: space.x, y: space.y, z: space.z, w, h, d 
-    });
-    
+    const newSpaces = splitSpace(space, itemPlacement);
     emptySpaces.push(...newSpaces);
 
-    // Clean up spaces every few iterations to maintain performance
-    if (iterations % 10 === 0) {
+    // Clean up spaces periodically to maintain performance
+    if (iterations % 50 === 0) {
       const cleanedSpaces = cleanupSpaces(emptySpaces);
       emptySpaces.length = 0;
       emptySpaces.push(...cleanedSpaces);
     }
   }
 
-  // Final cleanup
-  console.log(`Advanced packing: ${placedItems.length} items placed in ${iterations} iterations`);
+  console.log(`Final packing: ${placedItems.length} items placed in ${iterations} iterations`);
+  console.log(`Theoretical max was: ${theoreticalMax}, achieved: ${placedItems.length}`);
+  
   return placedItems;
 };
 
@@ -262,5 +247,13 @@ export const calculateSpaceUtilization = (
   const itemVolume = itemDims[0] * itemDims[1] * itemDims[2];
   const totalItemsVolume = placedItems.length * itemVolume;
   
-  return Math.round((totalItemsVolume / containerVolume) * 100);
+  const utilization = (totalItemsVolume / containerVolume) * 100;
+  console.log(`Space utilization calculation:
+    Container volume: ${containerVolume}
+    Item volume: ${itemVolume} 
+    Items placed: ${placedItems.length}
+    Total items volume: ${totalItemsVolume}
+    Utilization: ${utilization.toFixed(2)}%`);
+  
+  return Math.round(utilization * 100) / 100; // Round to 2 decimal places
 };

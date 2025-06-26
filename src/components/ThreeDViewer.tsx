@@ -1,4 +1,3 @@
-
 import { useRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -40,7 +39,7 @@ const WireframeBox = ({ position, args }: { position: [number, number, number], 
   return (
     <mesh position={position}>
       <boxGeometry args={args} />
-      <meshBasicMaterial wireframe color="#666" linewidth={2} />
+      <meshBasicMaterial wireframe color="#666" />
     </mesh>
   );
 };
