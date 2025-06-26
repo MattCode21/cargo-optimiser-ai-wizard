@@ -90,20 +90,44 @@ const PalletTab = () => {
   };
 
   const calculateOptimalArrangement = () => {
-    // Simplified calculation for demonstration
+    // Convert all dimensions to same unit (cm) for calculation
+    const convertToStandardUnit = (value: number, fromUnit: string): number => {
+      const conversions: { [key: string]: number } = {
+        'mm': 0.1,
+        'cm': 1,
+        'in': 2.54,
+        'ft': 30.48,
+        'm': 100
+      };
+      return value * (conversions[fromUnit] || 1);
+    };
+
     let totalCartons = 0;
     let totalWeight = 0;
     let totalVolume = 0;
     
     cartonTypes.forEach(carton => {
-      totalCartons += carton.quantity;
-      totalWeight += carton.weight * carton.quantity;
-      totalVolume += (carton.length * carton.width * carton.height) * carton.quantity;
+      if (carton.quantity > 0 && carton.length > 0 && carton.width > 0 && carton.height > 0) {
+        const convertedVolume = convertToStandardUnit(carton.length, carton.unit) * 
+                               convertToStandardUnit(carton.width, carton.unit) * 
+                               convertToStandardUnit(carton.height, carton.unit);
+        
+        totalCartons += carton.quantity;
+        totalWeight += carton.weight * carton.quantity;
+        totalVolume += convertedVolume * carton.quantity;
+      }
     });
 
-    const palletVolume = palletData.length * palletData.width * palletData.height;
-    const spaceUtilization = Math.min((totalVolume / palletVolume) * 100, 100);
-    const weightUtilization = Math.min((totalWeight / palletData.maxWeight) * 100, 100);
+    const palletVolumeConverted = convertToStandardUnit(palletData.length, palletData.unit) * 
+                                  convertToStandardUnit(palletData.width, palletData.unit) * 
+                                  convertToStandardUnit(palletData.height, palletData.unit);
+    
+    const spaceUtilization = totalVolume > 0 ? Math.min((totalVolume / palletVolumeConverted) * 100, 100) : 0;
+    const weightUtilization = palletData.maxWeight > 0 ? Math.min((totalWeight / palletData.maxWeight) * 100, 100) : 0;
+
+    console.log(`Pallet volume: ${palletVolumeConverted.toFixed(2)} cm³`);
+    console.log(`Total cartons volume: ${totalVolume.toFixed(2)} cm³`);
+    console.log(`Space utilization: ${spaceUtilization.toFixed(2)}%`);
 
     return { totalCartons, spaceUtilization, weightUtilization };
   };
@@ -318,6 +342,10 @@ const PalletTab = () => {
             isLoading={isOptimizing}
             showResult={optimizationComplete}
             maxItems={results.totalCartons}
+            containerDims={[palletData.length, palletData.width, palletData.height]}
+            itemDims={cartonTypes.length > 0 ? [cartonTypes[0].length || 1, cartonTypes[0].width || 1, cartonTypes[0].height || 1] : [1, 1, 1]}
+            containerUnit={palletData.unit}
+            itemUnit={cartonTypes.length > 0 ? cartonTypes[0].unit : 'cm'}
           />
         </CardContent>
       </Card>

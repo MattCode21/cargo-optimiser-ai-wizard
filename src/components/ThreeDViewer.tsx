@@ -12,6 +12,10 @@ interface ThreeDViewerProps {
   isLoading: boolean;
   showResult: boolean;
   maxItems: number;
+  containerDims: [number, number, number];
+  itemDims: [number, number, number];
+  containerUnit: string;
+  itemUnit: string;
 }
 
 interface PlacedItem {
@@ -44,16 +48,20 @@ const WireframeBox = ({ position, args }: { position: [number, number, number], 
   );
 };
 
-const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
+const LoadingAnimation = ({ containerDims, itemDims, containerUnit, itemUnit, itemCount }: { 
+  containerDims: [number, number, number];
+  itemDims: [number, number, number];
+  containerUnit: string;
+  itemUnit: string;
+  itemCount: number;
+}) => {
   const [currentItem, setCurrentItem] = useState(0);
   const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
 
   useEffect(() => {
-    const containerDims: [number, number, number] = [6, 4, 3];
-    const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-    const arrangement = getOptimalBinPacking(containerDims, itemDims);
+    const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
     setPlacedItems(arrangement.slice(0, itemCount));
-  }, [itemCount]);
+  }, [containerDims, itemDims, containerUnit, itemUnit, itemCount]);
 
   useEffect(() => {
     if (currentItem >= placedItems.length) return;
@@ -84,18 +92,22 @@ const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   );
 };
 
-const StaticResult = ({ itemCount }: { itemCount: number }) => {
+const StaticResult = ({ containerDims, itemDims, containerUnit, itemUnit, itemCount }: { 
+  containerDims: [number, number, number];
+  itemDims: [number, number, number];
+  containerUnit: string;
+  itemUnit: string;
+  itemCount: number;
+}) => {
   const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
   const [spaceUtilization, setSpaceUtilization] = useState(0);
 
   useEffect(() => {
-    const containerDims: [number, number, number] = [6, 4, 3];
-    const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-    const arrangement = getOptimalBinPacking(containerDims, itemDims);
+    const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
     const actualItems = arrangement.slice(0, itemCount);
     setPlacedItems(actualItems);
-    setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems));
-  }, [itemCount]);
+    setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems, containerUnit, itemUnit));
+  }, [containerDims, itemDims, containerUnit, itemUnit, itemCount]);
 
   return (
     <>
@@ -116,19 +128,22 @@ const StaticResult = ({ itemCount }: { itemCount: number }) => {
   );
 };
 
-const getMaxOptimizedItems = () => {
-  const containerDims: [number, number, number] = [6, 4, 3];
-  const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-  const arrangement = getOptimalBinPacking(containerDims, itemDims);
+const getMaxOptimizedItems = (containerDims: [number, number, number], itemDims: [number, number, number], containerUnit: string, itemUnit: string) => {
+  const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
   return arrangement.length;
 };
 
-const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) => {
+const ThreeDViewer = ({ isLoading, showResult, maxItems, containerDims, itemDims, containerUnit, itemUnit }: ThreeDViewerProps & {
+  containerDims: [number, number, number];
+  itemDims: [number, number, number];
+  containerUnit: string;
+  itemUnit: string;
+}) => {
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
   const [spaceUtilization, setSpaceUtilization] = useState(0);
   const [resetKey, setResetKey] = useState(0);
   
-  const optimizedMaxItems = getMaxOptimizedItems();
+  const optimizedMaxItems = getMaxOptimizedItems(containerDims, itemDims, containerUnit, itemUnit);
   const actualMaxItems = Math.min(maxItems, optimizedMaxItems);
 
   useEffect(() => {
@@ -136,17 +151,14 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
       setShowLoadingAnimation(true);
       const timer = setTimeout(() => {
         setShowLoadingAnimation(false);
-        // Calculate actual space utilization
-        const containerDims: [number, number, number] = [6, 4, 3];
-        const itemDims: [number, number, number] = [1.2, 0.6, 0.8];
-        const arrangement = getOptimalBinPacking(containerDims, itemDims);
+        const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
         const actualItems = arrangement.slice(0, actualMaxItems);
-        setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems));
+        setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems, containerUnit, itemUnit));
       }, actualMaxItems * 80 + 1000);
 
       return () => clearTimeout(timer);
     }
-  }, [showResult, isLoading, actualMaxItems]);
+  }, [showResult, isLoading, actualMaxItems, containerDims, itemDims, containerUnit, itemUnit]);
 
   const handleReset = () => {
     setResetKey(prev => prev + 1);
@@ -177,9 +189,21 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems }: ThreeDViewerProps) =>
                 <directionalLight position={[10, 10, 5]} intensity={1.2} />
                 <spotLight position={[0, 10, 0]} intensity={0.5} />
                 {showLoadingAnimation ? (
-                  <LoadingAnimation itemCount={actualMaxItems} />
+                  <LoadingAnimation 
+                    containerDims={containerDims}
+                    itemDims={itemDims}
+                    containerUnit={containerUnit}
+                    itemUnit={itemUnit}
+                    itemCount={actualMaxItems} 
+                  />
                 ) : (
-                  <StaticResult itemCount={actualMaxItems} />
+                  <StaticResult 
+                    containerDims={containerDims}
+                    itemDims={itemDims}
+                    containerUnit={containerUnit}
+                    itemUnit={itemUnit}
+                    itemCount={actualMaxItems} 
+                  />
                 )}
                 <OrbitControls 
                   enableZoom 

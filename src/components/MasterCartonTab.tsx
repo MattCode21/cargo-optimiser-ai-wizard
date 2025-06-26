@@ -85,20 +85,49 @@ const MasterCartonTab = () => {
   const calculateMaxItems = () => {
     if (!productData.length || !cartonData.length) return 0;
     
+    // Convert dimensions to same unit (cm) for calculation
+    const convertToStandardUnit = (value: number, fromUnit: string): number => {
+      const conversions: { [key: string]: number } = {
+        'mm': 0.1,
+        'cm': 1,
+        'in': 2.54,
+        'ft': 30.48,
+        'm': 100
+      };
+      return value * (conversions[fromUnit] || 1);
+    };
+
+    const containerDimsConverted = [
+      convertToStandardUnit(cartonData.length, cartonData.unit),
+      convertToStandardUnit(cartonData.width || cartonData.length, cartonData.unit), // For cubic, width = length
+      convertToStandardUnit(cartonData.height, cartonData.unit)
+    ];
+
+    const itemDimsConverted = [
+      convertToStandardUnit(productData.length, productData.unit),
+      convertToStandardUnit(productData.width, productData.unit),
+      convertToStandardUnit(productData.height, productData.unit)
+    ];
+    
     let containerVolume = 0;
     
     if (cartonData.shape === 'rectangular') {
-      containerVolume = cartonData.length * cartonData.width * cartonData.height;
+      containerVolume = containerDimsConverted[0] * containerDimsConverted[1] * containerDimsConverted[2];
     } else if (cartonData.shape === 'cylindrical' && cartonData.diameter) {
-      const radius = cartonData.diameter / 2;
-      containerVolume = Math.PI * radius * radius * cartonData.height;
+      const radius = convertToStandardUnit(cartonData.diameter, cartonData.unit) / 2;
+      containerVolume = Math.PI * radius * radius * containerDimsConverted[2];
     } else if (cartonData.shape === 'cubic') {
-      containerVolume = cartonData.length * cartonData.length * cartonData.length;
+      containerVolume = Math.pow(containerDimsConverted[0], 3);
     }
     
-    const productVolume = productData.length * productData.width * productData.height;
+    const productVolume = itemDimsConverted[0] * itemDimsConverted[1] * itemDimsConverted[2];
     const volumeConstraint = Math.floor(containerVolume / productVolume);
     const weightConstraint = Math.floor(cartonData.maxWeight / productData.weight);
+    
+    console.log(`Container volume: ${containerVolume.toFixed(2)} cm³`);
+    console.log(`Product volume: ${productVolume.toFixed(2)} cm³`);
+    console.log(`Volume constraint: ${volumeConstraint} items`);
+    console.log(`Weight constraint: ${weightConstraint} items`);
     
     return Math.min(volumeConstraint, weightConstraint);
   };
@@ -459,6 +488,15 @@ const MasterCartonTab = () => {
                 isLoading={isOptimizing}
                 showResult={optimizationComplete}
                 maxItems={calculateMaxItems()}
+                containerDims={cartonData.shape === 'rectangular' 
+                  ? [cartonData.length, cartonData.width, cartonData.height]
+                  : cartonData.shape === 'cubic'
+                  ? [cartonData.length, cartonData.length, cartonData.length]
+                  : [cartonData.diameter || 0, cartonData.diameter || 0, cartonData.height]
+                }
+                itemDims={[productData.length, productData.width, productData.height]}
+                containerUnit={cartonData.unit}
+                itemUnit={productData.unit}
               />
             </CardContent>
           </Card>
