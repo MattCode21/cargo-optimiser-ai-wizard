@@ -63,6 +63,7 @@ const ContainerTab = () => {
   ]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationComplete, setOptimizationComplete] = useState(false);
+  const [productDescription, setProductDescription] = useState('');
   const { toast } = useToast();
 
   const addPalletType = () => {
@@ -110,7 +111,6 @@ const ContainerTab = () => {
     let totalVolume = 0;
     
     palletTypes.forEach(pallet => {
-      if (!pallet.length || !pallet.width || !pallet.height) return;
       const convertedLength = convertToContainerUnits(pallet.length, pallet.unit);
       const convertedWidth = convertToContainerUnits(pallet.width, pallet.unit);
       const convertedHeight = convertToContainerUnits(pallet.height, pallet.unit);
@@ -121,8 +121,8 @@ const ContainerTab = () => {
     });
 
     const containerVolume = container.length * container.width * container.height;
-    const spaceUtilization = containerVolume > 0 ? Math.min((totalVolume / containerVolume) * 100, 100) : 0;
-    const weightUtilization = container.maxWeight > 0 ? Math.min((totalWeight / container.maxWeight) * 100, 100) : 0;
+    const spaceUtilization = Math.min((totalVolume / containerVolume) * 100, 100);
+    const weightUtilization = Math.min((totalWeight / container.maxWeight) * 100, 100);
 
     return { totalPallets, spaceUtilization, weightUtilization };
   };
@@ -302,6 +302,18 @@ const ContainerTab = () => {
 
       <Card>
         <CardHeader>
+          <CardTitle>Product Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProductDescriptionInput 
+            value={productDescription}
+            onChange={setProductDescription}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Container Loading Optimization</CardTitle>
         </CardHeader>
         <CardContent>
@@ -319,6 +331,18 @@ const ContainerTab = () => {
             isLoading={isOptimizing}
             showResult={optimizationComplete}
             maxItems={results.totalPallets}
+            containerDims={[
+              container.length,
+              container.width,
+              container.height
+            ]}
+            itemDims={[
+              palletTypes[0]?.length || 100,
+              palletTypes[0]?.width || 120,
+              palletTypes[0]?.height || 150
+            ]}
+            containerUnit="cm"
+            itemUnit={palletTypes[0]?.unit || "cm"}
           />
         </CardContent>
       </Card>
@@ -328,12 +352,12 @@ const ContainerTab = () => {
           maxItems={results.totalPallets}
           spaceUtilization={results.spaceUtilization}
           weightUtilization={results.weightUtilization}
-          recommendations={[
-            `Current ${containerType} container utilization is optimal`,
-            "Consider adjusting pallet heights to maximize vertical space",
-            "Weight distribution allows for additional pallets",
-            "Switching to 40ft container could increase capacity by 50%"
-          ]}
+          recommendations={getDimensionOptimizationTips(
+            [container.length, container.width, container.height],
+            [palletTypes[0]?.length || 100, palletTypes[0]?.width || 120, palletTypes[0]?.height || 150],
+            results.spaceUtilization,
+            results.totalPallets
+          )}
         />
       )}
     </div>

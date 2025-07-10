@@ -2,25 +2,23 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import MasterCartonTab from "@/components/MasterCartonTab";
 import PalletTab from "@/components/PalletTab";
 import ContainerTab from "@/components/ContainerTab";
-import { Package, Truck, Container } from "lucide-react";
+import { Package, Truck, Container, Sparkles } from "lucide-react";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Smart Loading Optimizer
-          </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Optimize your loading efficiency with AI-powered 3D visualization for master cartons, pallets, and containers
+          <p className="text-lg text-muted-foreground">
+            Optimize your container loading with AI-powered 3D visualization and smart packaging recommendations
           </p>
         </div>
 
-        <Card className="backdrop-blur-sm bg-white/90 shadow-xl border-0">
+        <Card className="shadow-xl">
           <CardContent className="p-6">
             <Tabs defaultValue="master-carton" className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-8">
