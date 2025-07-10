@@ -63,7 +63,6 @@ const ContainerTab = () => {
   ]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationComplete, setOptimizationComplete] = useState(false);
-  const [productDescription, setProductDescription] = useState('');
   const { toast } = useToast();
 
   const addPalletType = () => {
@@ -302,18 +301,6 @@ const ContainerTab = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Product Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ProductDescriptionInput 
-            value={productDescription}
-            onChange={setProductDescription}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Container Loading Optimization</CardTitle>
         </CardHeader>
         <CardContent>
@@ -331,18 +318,6 @@ const ContainerTab = () => {
             isLoading={isOptimizing}
             showResult={optimizationComplete}
             maxItems={results.totalPallets}
-            containerDims={[
-              container.length,
-              container.width,
-              container.height
-            ]}
-            itemDims={[
-              palletTypes[0]?.length || 100,
-              palletTypes[0]?.width || 120,
-              palletTypes[0]?.height || 150
-            ]}
-            containerUnit="cm"
-            itemUnit={palletTypes[0]?.unit || "cm"}
           />
         </CardContent>
       </Card>
@@ -352,12 +327,12 @@ const ContainerTab = () => {
           maxItems={results.totalPallets}
           spaceUtilization={results.spaceUtilization}
           weightUtilization={results.weightUtilization}
-          recommendations={getDimensionOptimizationTips(
-            [container.length, container.width, container.height],
-            [palletTypes[0]?.length || 100, palletTypes[0]?.width || 120, palletTypes[0]?.height || 150],
-            results.spaceUtilization,
-            results.totalPallets
-          )}
+          recommendations={[
+            `Current ${containerType} container utilization is optimal`,
+            "Consider adjusting pallet heights to maximize vertical space",
+            "Weight distribution allows for additional pallets",
+            "Switching to 40ft container could increase capacity by 50%"
+          ]}
         />
       )}
     </div>
