@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, Calculator, Play, Image as ImageIcon, Box } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import ImageUploader from "./ImageUploader";
+import { ImageUploader } from "./ImageUploader";
 import ThreeDViewer from "./ThreeDViewer";
 import OptimizationResults from "./OptimizationResults";
 

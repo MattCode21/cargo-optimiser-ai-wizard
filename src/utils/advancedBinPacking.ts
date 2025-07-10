@@ -39,6 +39,16 @@ export const getOptimalBinPacking = (
   containerUnit: string = 'cm',
   itemUnit: string = 'cm'
 ): PlacedItem[] => {
+  // Use the extreme point algorithm for better packing
+  return extremePointPacking(containerDims, itemDims, containerUnit, itemUnit);
+};
+
+const getOptimalBinPackingFromExtreme = (
+  containerDims: [number, number, number], 
+  itemDims: [number, number, number],
+  containerUnit: string = 'cm',
+  itemUnit: string = 'cm'
+): PlacedItem[] => {
   // Convert all dimensions to centimeters (standard unit)
   const [containerX, containerY, containerZ] = containerDims.map(dim => 
     convertToStandardUnit(dim, containerUnit)
@@ -255,6 +265,9 @@ export const getOptimalBinPacking = (
   
   return placedItems;
 };
+
+// Use extreme point algorithm from separate file
+import { getOptimalBinPacking as extremePointPacking } from './extremePointBinPacking';
 
 export const calculateSpaceUtilization = (
   containerDims: [number, number, number],

@@ -1,58 +1,83 @@
+import { useState, useRef } from 'react'
+import { Upload, X, Download } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { removeBackground, loadImage } from '@/utils/backgroundRemoval'
+import { useToast } from '@/hooks/use-toast'
 
-import { useState, useRef } from 'react';
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Upload, Image as ImageIcon, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+export function ImageUploader() {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [processedImage, setProcessedImage] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { toast } = useToast()
 
-interface ImageUploaderProps {
-  onImageUpload: (imageUrl: string) => void;
-}
-
-const ImageUploader = ({ onImageUpload }: ImageUploaderProps) => {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [processedImage, setProcessedImage] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File Type",
-        description: "Please select an image file.",
-        variant: "destructive"
-      });
-      return;
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setSelectedImage(e.target?.result as string)
+        setProcessedImage(null) // Reset processed image when new image is uploaded
+      }
+      reader.readAsDataURL(file)
     }
+  }
 
-    // Show original image
-    const imageUrl = URL.createObjectURL(file);
-    setSelectedImage(imageUrl);
-    
-    // Simulate background removal process
+  const handleRemoveBackground = async () => {
+    if (!selectedImage) return;
+
     setIsProcessing(true);
-    
-    setTimeout(() => {
-      // For demo purposes, we'll use the same image
-      // In a real implementation, you'd use the background removal utility
-      setProcessedImage(imageUrl);
-      setIsProcessing(false);
-      onImageUpload(imageUrl);
+    try {
+      // Convert data URL to blob
+      const response = await fetch(selectedImage);
+      const blob = await response.blob();
+      
+      // Load image
+      const imageElement = await loadImage(blob);
+      
+      // Remove background
+      const processedBlob = await removeBackground(imageElement);
+      
+      // Convert back to data URL for display
+      const processedDataUrl = URL.createObjectURL(processedBlob);
+      setProcessedImage(processedDataUrl);
       
       toast({
-        title: "Background Removed",
-        description: "Product image has been processed successfully."
+        title: "Success",
+        description: "Background removed successfully!"
       });
-    }, 2000);
-  };
+    } catch (error) {
+      console.error('Background removal failed:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove background. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
+  const removeImage = () => {
+    setSelectedImage(null)
+    setProcessedImage(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const downloadImage = () => {
+    const imageToDownload = processedImage || selectedImage;
+    if (imageToDownload) {
+      const link = document.createElement('a')
+      link.href = imageToDownload
+      link.download = processedImage ? 'no-background-image.png' : 'original-image.png'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -60,69 +85,76 @@ const ImageUploader = ({ onImageUpload }: ImageUploaderProps) => {
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        onChange={handleFileSelect}
+        onChange={handleImageUpload}
         className="hidden"
       />
-      
-      {!selectedImage && (
-        <Card className="border-dashed border-2 border-gray-300 hover:border-blue-400 transition-colors cursor-pointer" onClick={handleUploadClick}>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Upload size={48} className="text-gray-400 mb-4" />
-            <p className="text-lg font-medium text-gray-600 mb-2">Upload Product Image</p>
-            <p className="text-sm text-gray-500">Click to select an image file</p>
-            <Button className="mt-4">Choose File</Button>
-          </CardContent>
-        </Card>
-      )}
+
+      <Card className="border-dashed border-2 border-gray-300 hover:border-primary transition-colors cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+        <CardContent className="flex flex-col items-center justify-center py-8">
+          <Upload className="h-12 w-12 text-gray-400 mb-4" />
+          <p className="text-lg font-medium mb-2">Upload Product Image</p>
+          <p className="text-sm text-muted-foreground">Click to select an image file</p>
+          <Button className="mt-4">Choose File</Button>
+        </CardContent>
+      </Card>
 
       {selectedImage && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-medium mb-2">Original Image</h3>
-              <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                <img 
-                  src={selectedImage} 
-                  alt="Original product" 
-                  className="w-full h-full object-contain"
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <h4 className="text-sm font-medium mb-2">Original Image</h4>
+              <img
+                src={selectedImage}
+                alt="Original"
+                className="w-full h-64 object-contain rounded-lg border"
+              />
+            </div>
+            {processedImage && (
+              <div className="relative">
+                <h4 className="text-sm font-medium mb-2">Background Removed</h4>
+                <img
+                  src={processedImage}
+                  alt="Processed"
+                  className="w-full h-64 object-contain rounded-lg border"
+                  style={{
+                    background: 'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)',
+                    backgroundSize: '20px 20px',
+                    backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px'
+                  }}
                 />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-medium mb-2">Background Removed</h3>
-              <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center">
-                {isProcessing ? (
-                  <div className="flex flex-col items-center">
-                    <Loader2 className="animate-spin mb-2" size={32} />
-                    <p className="text-sm text-gray-600">Processing...</p>
-                  </div>
-                ) : processedImage ? (
-                  <img 
-                    src={processedImage} 
-                    alt="Processed product" 
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <ImageIcon size={48} className="text-gray-400" />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {selectedImage && (
-        <div className="flex justify-center">
-          <Button variant="outline" onClick={handleUploadClick}>
-            Upload Different Image
+            )}
+          </div>
+          <Button
+            onClick={removeImage}
+            size="sm"
+            variant="destructive"
+            className="absolute top-2 right-2"
+          >
+            <X className="h-4 w-4" />
           </Button>
+          <div className="flex gap-2">
+            {!processedImage && (
+              <Button
+                onClick={handleRemoveBackground}
+                disabled={isProcessing}
+                variant="outline"
+                className="flex-1"
+              >
+                {isProcessing ? "Processing..." : "Remove Background"}
+              </Button>
+            )}
+            <Button
+              onClick={downloadImage}
+              variant="outline"
+              className="flex-1"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download {processedImage ? "Processed" : "Original"}
+            </Button>
+          </div>
         </div>
       )}
     </div>
-  );
-};
-
-export default ImageUploader;
+  )
+}
