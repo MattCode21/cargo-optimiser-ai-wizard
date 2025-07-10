@@ -110,6 +110,7 @@ const ContainerTab = () => {
     let totalVolume = 0;
     
     palletTypes.forEach(pallet => {
+      if (!pallet.length || !pallet.width || !pallet.height) return;
       const convertedLength = convertToContainerUnits(pallet.length, pallet.unit);
       const convertedWidth = convertToContainerUnits(pallet.width, pallet.unit);
       const convertedHeight = convertToContainerUnits(pallet.height, pallet.unit);
@@ -120,8 +121,8 @@ const ContainerTab = () => {
     });
 
     const containerVolume = container.length * container.width * container.height;
-    const spaceUtilization = Math.min((totalVolume / containerVolume) * 100, 100);
-    const weightUtilization = Math.min((totalWeight / container.maxWeight) * 100, 100);
+    const spaceUtilization = containerVolume > 0 ? Math.min((totalVolume / containerVolume) * 100, 100) : 0;
+    const weightUtilization = container.maxWeight > 0 ? Math.min((totalWeight / container.maxWeight) * 100, 100) : 0;
 
     return { totalPallets, spaceUtilization, weightUtilization };
   };

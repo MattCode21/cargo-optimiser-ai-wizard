@@ -83,13 +83,13 @@ const MasterCartonTab = () => {
   const calculateMaxItems = () => {
     if (!productData.length || !cartonData.length) return 0;
     
-    const volumeConstraint = Math.floor(
+    const volumeConstraint = Math.max(1, Math.floor(
       (cartonData.length / productData.length) *
       (cartonData.width / productData.width) *
       (cartonData.height / productData.height)
-    );
+    ));
     
-    const weightConstraint = Math.floor(cartonData.maxWeight / productData.weight);
+    const weightConstraint = productData.weight > 0 ? Math.floor(cartonData.maxWeight / productData.weight) : 1;
     
     return Math.min(volumeConstraint, weightConstraint);
   };

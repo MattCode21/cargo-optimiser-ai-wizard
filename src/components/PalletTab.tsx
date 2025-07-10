@@ -90,20 +90,20 @@ const PalletTab = () => {
   };
 
   const calculateOptimalArrangement = () => {
-    // Simplified calculation for demonstration
     let totalCartons = 0;
     let totalWeight = 0;
     let totalVolume = 0;
     
     cartonTypes.forEach(carton => {
+      if (!carton.length || !carton.width || !carton.height) return;
       totalCartons += carton.quantity;
       totalWeight += carton.weight * carton.quantity;
       totalVolume += (carton.length * carton.width * carton.height) * carton.quantity;
     });
 
-    const palletVolume = palletData.length * palletData.width * palletData.height;
-    const spaceUtilization = Math.min((totalVolume / palletVolume) * 100, 100);
-    const weightUtilization = Math.min((totalWeight / palletData.maxWeight) * 100, 100);
+    const palletVolume = (palletData.length || 1) * (palletData.width || 1) * (palletData.height || 1);
+    const spaceUtilization = palletVolume > 0 ? Math.min((totalVolume / palletVolume) * 100, 100) : 0;
+    const weightUtilization = palletData.maxWeight > 0 ? Math.min((totalWeight / palletData.maxWeight) * 100, 100) : 0;
 
     return { totalCartons, spaceUtilization, weightUtilization };
   };
