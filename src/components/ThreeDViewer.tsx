@@ -1,12 +1,10 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, RotateCcw, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import * as THREE from 'three';
-import { getOptimalBinPacking, calculateSpaceUtilization } from '@/utils/advancedBinPacking';
 
 interface ThreeDViewerProps {
   isLoading: boolean;
@@ -48,117 +46,117 @@ const WireframeBox = ({ position, args }: { position: [number, number, number], 
   );
 };
 
-const LoadingAnimation = ({ containerDims, itemDims, containerUnit, itemUnit, itemCount }: { 
-  containerDims: [number, number, number];
-  itemDims: [number, number, number];
-  containerUnit: string;
-  itemUnit: string;
-  itemCount: number;
-}) => {
+const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
   const [currentItem, setCurrentItem] = useState(0);
-  const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
 
   useEffect(() => {
-    const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
-    setPlacedItems(arrangement.slice(0, itemCount));
-  }, [containerDims, itemDims, containerUnit, itemUnit, itemCount]);
-
-  useEffect(() => {
-    if (currentItem >= placedItems.length) return;
+    if (currentItem >= itemCount) return;
 
     const timer = setTimeout(() => {
-      setCurrentItem(prev => Math.min(prev + 1, placedItems.length));
-    }, 80);
+      setCurrentItem(prev => Math.min(prev + 1, itemCount));
+    }, 100);
 
     return () => clearTimeout(timer);
-  }, [currentItem, placedItems.length]);
+  }, [currentItem, itemCount]);
+
+  const items = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < currentItem; i++) {
+      const x = (i % 3) - 1;
+      const y = Math.floor(i / 9) - 0.5;
+      const z = Math.floor((i % 9) / 3) - 1;
+      
+      result.push(
+        <SimpleBox
+          key={i}
+          position={[x * 1.2, y * 1.2, z * 1.2]}
+          args={[1, 1, 1]}
+          color={`hsl(${(i * 25) % 360}, 75%, 55%)`}
+        />
+      );
+    }
+    return result;
+  }, [currentItem]);
 
   return (
     <>
       <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
-      {placedItems.slice(0, currentItem).map((item, index) => (
-        <SimpleBox
-          key={index}
-          position={item.position}
-          args={item.dimensions}
-          rotation={item.rotation}
-          color={item.rotated ? 
-            `hsl(${(index * 30 + 180) % 360}, 90%, 65%)` : 
-            `hsl(${(index * 25) % 360}, 75%, 55%)`
-          }
-        />
-      ))}
+      {items}
     </>
   );
 };
 
-const StaticResult = ({ containerDims, itemDims, containerUnit, itemUnit, itemCount }: { 
-  containerDims: [number, number, number];
-  itemDims: [number, number, number];
-  containerUnit: string;
-  itemUnit: string;
-  itemCount: number;
-}) => {
-  const [placedItems, setPlacedItems] = useState<PlacedItem[]>([]);
-  const [spaceUtilization, setSpaceUtilization] = useState(0);
-
-  useEffect(() => {
-    const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
-    const actualItems = arrangement.slice(0, itemCount);
-    setPlacedItems(actualItems);
-    setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems, containerUnit, itemUnit));
-  }, [containerDims, itemDims, containerUnit, itemUnit, itemCount]);
+const StaticResult = ({ itemCount }: { itemCount: number }) => {
+  const items = useMemo(() => {
+    const result = [];
+    const maxDisplay = Math.min(itemCount, 27); // Limit to prevent performance issues
+    
+    for (let i = 0; i < maxDisplay; i++) {
+      const x = (i % 3) - 1;
+      const y = Math.floor(i / 9) - 0.5;
+      const z = Math.floor((i % 9) / 3) - 1;
+      
+      result.push(
+        <SimpleBox
+          key={i}
+          position={[x * 1.2, y * 1.2, z * 1.2]}
+          args={[1, 1, 1]}
+          color={`hsl(${(i * 25) % 360}, 75%, 55%)`}
+        />
+      );
+    }
+    return result;
+  }, [itemCount]);
 
   return (
     <>
       <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
-      {placedItems.map((item, index) => (
-        <SimpleBox
-          key={index}
-          position={item.position}
-          args={item.dimensions}
-          rotation={item.rotation}
-          color={item.rotated ? 
-            `hsl(${(index * 30 + 180) % 360}, 90%, 65%)` : 
-            `hsl(${(index * 25) % 360}, 75%, 55%)`
-          }
-        />
-      ))}
+      {items}
     </>
   );
 };
 
-const getMaxOptimizedItems = (containerDims: [number, number, number], itemDims: [number, number, number], containerUnit: string, itemUnit: string) => {
-  const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
-  return arrangement.length;
-};
-
-const ThreeDViewer = ({ isLoading, showResult, maxItems, containerDims, itemDims, containerUnit, itemUnit }: ThreeDViewerProps & {
-  containerDims: [number, number, number];
-  itemDims: [number, number, number];
-  containerUnit: string;
-  itemUnit: string;
-}) => {
+const ThreeDViewer = ({ 
+  isLoading, 
+  showResult, 
+  maxItems, 
+  containerDims, 
+  itemDims, 
+  containerUnit, 
+  itemUnit 
+}: ThreeDViewerProps) => {
   const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
   const [spaceUtilization, setSpaceUtilization] = useState(0);
   const [resetKey, setResetKey] = useState(0);
   
-  const optimizedMaxItems = getMaxOptimizedItems(containerDims, itemDims, containerUnit, itemUnit);
-  const actualMaxItems = Math.min(maxItems, optimizedMaxItems);
+  const actualMaxItems = Math.min(maxItems || 0, 50); // Limit for performance
+
+  // Calculate space utilization only when needed
+  const calculatedUtilization = useMemo(() => {
+    if (!containerDims || !itemDims || !actualMaxItems) return 0;
+    
+    try {
+      const containerVolume = containerDims[0] * containerDims[1] * containerDims[2];
+      const itemVolume = itemDims[0] * itemDims[1] * itemDims[2];
+      const totalItemsVolume = actualMaxItems * itemVolume;
+      return Math.round((totalItemsVolume / containerVolume) * 100);
+    } catch (error) {
+      console.error('Error calculating utilization:', error);
+      return 0;
+    }
+  }, [containerDims, itemDims, actualMaxItems]);
 
   useEffect(() => {
     if (showResult && !isLoading) {
       setShowLoadingAnimation(true);
       const timer = setTimeout(() => {
         setShowLoadingAnimation(false);
-        const arrangement = getOptimalBinPacking(containerDims, itemDims, containerUnit, itemUnit);
-        const actualItems = arrangement.slice(0, actualMaxItems);
-        setSpaceUtilization(calculateSpaceUtilization(containerDims, itemDims, actualItems, containerUnit, itemUnit));
-      }, actualMaxItems * 80 + 1000);
+        setSpaceUtilization(calculatedUtilization);
+      }, actualMaxItems * 50 + 1000);
 
       return () => clearTimeout(timer);
     }
-  }, [showResult, isLoading, actualMaxItems, containerDims, itemDims, containerUnit, itemUnit]);
+  }, [showResult, isLoading, actualMaxItems, calculatedUtilization]);
 
   const handleReset = () => {
     setResetKey(prev => prev + 1);
@@ -189,21 +187,9 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems, containerDims, itemDims
                 <directionalLight position={[10, 10, 5]} intensity={1.2} />
                 <spotLight position={[0, 10, 0]} intensity={0.5} />
                 {showLoadingAnimation ? (
-                  <LoadingAnimation 
-                    containerDims={containerDims}
-                    itemDims={itemDims}
-                    containerUnit={containerUnit}
-                    itemUnit={itemUnit}
-                    itemCount={actualMaxItems} 
-                  />
+                  <LoadingAnimation itemCount={actualMaxItems} />
                 ) : (
-                  <StaticResult 
-                    containerDims={containerDims}
-                    itemDims={itemDims}
-                    containerUnit={containerUnit}
-                    itemUnit={itemUnit}
-                    itemCount={actualMaxItems} 
-                  />
+                  <StaticResult itemCount={actualMaxItems} />
                 )}
                 <OrbitControls 
                   enableZoom 
@@ -228,17 +214,17 @@ const ThreeDViewer = ({ isLoading, showResult, maxItems, containerDims, itemDims
                       Space Utilization: <span className="font-semibold text-green-600">{spaceUtilization}%</span>
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Max Capacity: {optimizedMaxItems} items
+                      Max Capacity: {actualMaxItems} items
                     </p>
                   </div>
                 </div>
                 
                 <div className="flex gap-2">
                   <Badge variant="secondary" className="text-xs">
-                    🔄 Bright = Rotated
+                    🔄 Optimized Layout
                   </Badge>
                   <Badge variant="outline" className="text-xs">
-                    📦 Multi-orientation
+                    📦 3D Visualization
                   </Badge>
                 </div>
               </div>

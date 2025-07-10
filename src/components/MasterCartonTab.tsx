@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,32 +53,19 @@ const MasterCartonTab = () => {
   const [productDescription, setProductDescription] = useState('');
   const { toast } = useToast();
 
-  const handleImageUpload = (imageUrl: string) => {
-    setProductData(prev => ({ ...prev, image: imageUrl }));
-    toast({
-      title: "Image uploaded successfully",
-      description: "Product image has been processed and background removed."
-    });
-  };
-
-  const calculateMaxItems = () => {
+  const calculateMaxItems = useMemo(() => {
     if (!productData.length || !cartonData.length) return 0;
     
-    // Convert dimensions to same unit (cm) for calculation
     const convertToStandardUnit = (value: number, fromUnit: string): number => {
       const conversions: { [key: string]: number } = {
-        'mm': 0.1,
-        'cm': 1,
-        'in': 2.54,
-        'ft': 30.48,
-        'm': 100
+        'mm': 0.1, 'cm': 1, 'in': 2.54, 'ft': 30.48, 'm': 100
       };
       return value * (conversions[fromUnit] || 1);
     };
 
     const containerDimsConverted = [
       convertToStandardUnit(cartonData.length, cartonData.unit),
-      convertToStandardUnit(cartonData.width || cartonData.length, cartonData.unit), // For cubic, width = length
+      convertToStandardUnit(cartonData.width || cartonData.length, cartonData.unit),
       convertToStandardUnit(cartonData.height, cartonData.unit)
     ];
 
@@ -100,14 +87,14 @@ const MasterCartonTab = () => {
     }
     
     const productVolume = itemDimsConverted[0] * itemDimsConverted[1] * itemDimsConverted[2];
-    const volumeConstraint = Math.floor(containerVolume / productVolume);
-    const weightConstraint = Math.floor(cartonData.maxWeight / productData.weight);
+    const volumeConstraint = productVolume > 0 ? Math.floor(containerVolume / productVolume) : 0;
+    const weightConstraint = productData.weight > 0 ? Math.floor(cartonData.maxWeight / productData.weight) : 0;
     
     return Math.min(volumeConstraint, weightConstraint);
-  };
+  }, [productData, cartonData]);
 
-  const generateSmartRecommendations = () => {
-    const maxItems = calculateMaxItems();
+  const generateSmartRecommendations = useMemo(() => {
+    const maxItems = calculateMaxItems;
     const recommendations: string[] = [];
 
     if (productData.length > 0 && cartonData.length > 0) {
@@ -126,7 +113,6 @@ const MasterCartonTab = () => {
       const cartonWidth = convertToStandardUnit(cartonData.width, cartonData.unit);
       const cartonHeight = convertToStandardUnit(cartonData.height, cartonData.unit);
 
-      // Calculate how many products can fit in each dimension
       const productsPerLength = Math.floor(cartonLength / productLength);
       const productsPerWidth = Math.floor(cartonWidth / productWidth);
       const productsPerHeight = Math.floor(cartonHeight / productHeight);
@@ -136,10 +122,8 @@ const MasterCartonTab = () => {
         recommendations.push(`Theoretical maximum is ${theoreticalMax} items, but weight limits to ${maxItems} items`);
       }
 
-      // Dimension optimization suggestions
       const lengthWaste = cartonLength - (productsPerLength * productLength);
       const widthWaste = cartonWidth - (productsPerWidth * productWidth);
-      const heightWaste = cartonHeight - (productsPerHeight * productHeight);
 
       if (lengthWaste > 2) {
         const newLength = cartonLength - lengthWaste + productLength;
@@ -151,12 +135,6 @@ const MasterCartonTab = () => {
         recommendations.push(`Reduce carton width to ${newWidth.toFixed(0)}cm to eliminate ${widthWaste.toFixed(0)}cm waste, or fit one more product`);
       }
 
-      if (heightWaste > 2) {
-        const newHeight = cartonHeight - heightWaste + productHeight;
-        recommendations.push(`Reduce carton height to ${newHeight.toFixed(0)}cm to eliminate ${heightWaste.toFixed(0)}cm waste, or fit one more product`);
-      }
-
-      // Weight optimization
       const totalWeight = maxItems * productData.weight;
       const remainingWeight = cartonData.maxWeight - totalWeight;
       if (remainingWeight > productData.weight) {
@@ -164,7 +142,6 @@ const MasterCartonTab = () => {
         recommendations.push(`Carton can handle ${remainingWeight.toFixed(0)}kg more weight (${additionalItems} more items if space allows)`);
       }
 
-      // Product-specific recommendations based on description
       if (productDescription.toLowerCase().includes('door handle')) {
         recommendations.push('For door handles: Use individual foam sleeves and arrange in single layer to prevent scratching');
       }
@@ -177,10 +154,10 @@ const MasterCartonTab = () => {
     }
 
     return recommendations;
-  };
+  }, [productData, cartonData, productDescription, calculateMaxItems]);
 
   const handleOptimize = async () => {
-    if (!productData.image || !productData.length || !cartonData.length) {
+    if (!productData.length || !cartonData.length) {
       toast({
         title: "Missing Information",
         description: "Please complete all required fields before optimizing.",
@@ -191,7 +168,6 @@ const MasterCartonTab = () => {
 
     setIsOptimizing(true);
     
-    // Simulate optimization process
     setTimeout(() => {
       setIsOptimizing(false);
       setOptimizationComplete(true);
@@ -483,7 +459,6 @@ const MasterCartonTab = () => {
                 onValueChange={(value) => setCartonData(prev => ({ 
                   ...prev, 
                   shape: value,
-                  // Reset dimensions when shape changes
                   length: 0,
                   width: 0,
                   height: 0,
@@ -516,7 +491,7 @@ const MasterCartonTab = () => {
 
             <div className="p-4 bg-blue-50 rounded-lg">
               <h4 className="font-semibold text-blue-900 mb-2">Calculated Maximum Items:</h4>
-              <p className="text-2xl font-bold text-blue-700">{calculateMaxItems()} products</p>
+              <p className="text-2xl font-bold text-blue-700">{calculateMaxItems} products</p>
               <p className="text-sm text-blue-600 mt-1">
                 Based on {cartonData.shape} container volume and weight constraints
               </p>
@@ -560,7 +535,7 @@ const MasterCartonTab = () => {
               <ThreeDViewer 
                 isLoading={isOptimizing}
                 showResult={optimizationComplete}
-                maxItems={calculateMaxItems()}
+                maxItems={calculateMaxItems}
                 containerDims={cartonData.shape === 'rectangular' 
                   ? [cartonData.length, cartonData.width, cartonData.height]
                   : cartonData.shape === 'cubic'
@@ -576,10 +551,10 @@ const MasterCartonTab = () => {
 
           {optimizationComplete && (
             <OptimizationResults 
-              maxItems={calculateMaxItems()}
+              maxItems={calculateMaxItems}
               spaceUtilization={85}
               weightUtilization={92}
-              recommendations={generateSmartRecommendations()}
+              recommendations={generateSmartRecommendations}
             />
           )}
 
