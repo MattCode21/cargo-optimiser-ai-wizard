@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,8 @@ import { Plus, Minus, Truck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ThreeDViewer from "./ThreeDViewer";
 import OptimizationResults from "./OptimizationResults";
+import { ProductDescriptionInput } from "./ProductDescriptionInput";
+import { getDimensionOptimizationTips } from "@/utils/packagingRecommendations";
 
 interface PalletType {
   id: string;
@@ -125,6 +126,68 @@ const ContainerTab = () => {
     const weightUtilization = Math.min((totalWeight / container.maxWeight) * 100, 100);
 
     return { totalPallets, spaceUtilization, weightUtilization };
+  };
+
+  const generateSmartRecommendations = () => {
+    const container = getCurrentContainer();
+    const results = calculateOptimalArrangement();
+    const recommendations: string[] = [];
+
+    // Calculate potential improvements
+    const currentPallet = palletTypes[0];
+    if (currentPallet) {
+      const currentLength = convertToContainerUnits(currentPallet.length, currentPallet.unit);
+      const currentWidth = convertToContainerUnits(currentPallet.width, currentPallet.unit);
+      const currentHeight = convertToContainerUnits(currentPallet.height, currentPallet.unit);
+
+      // Length optimization
+      const palletsPerRow = Math.floor(container.length / currentLength);
+      const palletsPerColumn = Math.floor(container.width / currentWidth);
+      const palletsPerLayer = Math.floor(container.height / currentHeight);
+      const maxPallets = palletsPerRow * palletsPerColumn * palletsPerLayer;
+
+      if (results.totalPallets < maxPallets) {
+        const additionalPallets = maxPallets - results.totalPallets;
+        recommendations.push(`You can fit ${additionalPallets} more pallets by optimizing dimensions`);
+      }
+
+      // Dimension optimization suggestions
+      const lengthWaste = container.length - (palletsPerRow * currentLength);
+      const widthWaste = container.width - (palletsPerColumn * currentWidth);
+      const heightWaste = container.height - (palletsPerLayer * currentHeight);
+
+      if (lengthWaste > 10) {
+        const newLength = currentLength + (lengthWaste / palletsPerRow);
+        recommendations.push(`Increase pallet length to ${newLength.toFixed(0)}cm to utilize ${lengthWaste.toFixed(0)}cm of wasted space`);
+      }
+
+      if (widthWaste > 10) {
+        const newWidth = currentWidth + (widthWaste / palletsPerColumn);
+        recommendations.push(`Increase pallet width to ${newWidth.toFixed(0)}cm to utilize ${widthWaste.toFixed(0)}cm of wasted space`);
+      }
+
+      if (heightWaste > 10) {
+        const newHeight = currentHeight + (heightWaste / palletsPerLayer);
+        recommendations.push(`Increase pallet height to ${newHeight.toFixed(0)}cm to utilize ${heightWaste.toFixed(0)}cm of wasted space`);
+      }
+
+      // Weight optimization
+      const remainingWeight = container.maxWeight - results.totalPallets * currentPallet.weight;
+      if (remainingWeight > 1000) {
+        const additionalPalletsByWeight = Math.floor(remainingWeight / currentPallet.weight);
+        recommendations.push(`Container can handle ${remainingWeight.toFixed(0)}kg more weight (approximately ${additionalPalletsByWeight} more pallets)`);
+      }
+
+      // Product-specific recommendations based on description
+      if (productDescription.toLowerCase().includes('fragile') || productDescription.toLowerCase().includes('glass')) {
+        recommendations.push('For fragile items: Use extra cushioning and reduce stacking height by 20%');
+      }
+      if (productDescription.toLowerCase().includes('heavy') || productDescription.toLowerCase().includes('metal')) {
+        recommendations.push('For heavy items: Distribute weight evenly and place heavier pallets at bottom');
+      }
+    }
+
+    return recommendations;
   };
 
   const handleOptimize = async () => {
@@ -352,12 +415,7 @@ const ContainerTab = () => {
           maxItems={results.totalPallets}
           spaceUtilization={results.spaceUtilization}
           weightUtilization={results.weightUtilization}
-          recommendations={getDimensionOptimizationTips(
-            [container.length, container.width, container.height],
-            [palletTypes[0]?.length || 100, palletTypes[0]?.width || 120, palletTypes[0]?.height || 150],
-            results.spaceUtilization,
-            results.totalPallets
-          )}
+          recommendations={generateSmartRecommendations()}
         />
       )}
     </div>

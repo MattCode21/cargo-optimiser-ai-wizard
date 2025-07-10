@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,7 @@ import { Plus, Minus, Calculator } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ThreeDViewer from "./ThreeDViewer";
 import OptimizationResults from "./OptimizationResults";
+import { ProductDescriptionInput } from "./ProductDescriptionInput";
 
 interface CartonType {
   id: string;
@@ -51,6 +51,7 @@ const PalletTab = () => {
   });
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationComplete, setOptimizationComplete] = useState(false);
+  const [productDescription, setProductDescription] = useState('');
   const { toast } = useToast();
 
   const addCartonType = () => {
@@ -125,11 +126,79 @@ const PalletTab = () => {
     const spaceUtilization = totalVolume > 0 ? Math.min((totalVolume / palletVolumeConverted) * 100, 100) : 0;
     const weightUtilization = palletData.maxWeight > 0 ? Math.min((totalWeight / palletData.maxWeight) * 100, 100) : 0;
 
-    console.log(`Pallet volume: ${palletVolumeConverted.toFixed(2)} cm³`);
-    console.log(`Total cartons volume: ${totalVolume.toFixed(2)} cm³`);
-    console.log(`Space utilization: ${spaceUtilization.toFixed(2)}%`);
-
     return { totalCartons, spaceUtilization, weightUtilization };
+  };
+
+  const generateSmartRecommendations = () => {
+    const results = calculateOptimalArrangement();
+    const recommendations: string[] = [];
+
+    // Calculate potential improvements
+    const currentCarton = cartonTypes[0];
+    if (currentCarton && currentCarton.length > 0) {
+      const convertToStandardUnit = (value: number, fromUnit: string): number => {
+        const conversions: { [key: string]: number } = {
+          'mm': 0.1, 'cm': 1, 'in': 2.54, 'ft': 30.48, 'm': 100
+        };
+        return value * (conversions[fromUnit] || 1);
+      };
+
+      const cartonLength = convertToStandardUnit(currentCarton.length, currentCarton.unit);
+      const cartonWidth = convertToStandardUnit(currentCarton.width, currentCarton.unit);
+      const cartonHeight = convertToStandardUnit(currentCarton.height, currentCarton.unit);
+      
+      const palletLength = convertToStandardUnit(palletData.length, palletData.unit);
+      const palletWidth = convertToStandardUnit(palletData.width, palletData.unit);
+      const palletHeight = convertToStandardUnit(palletData.height, palletData.unit);
+
+      // Calculate how many cartons can fit
+      const cartonsPerRow = Math.floor(palletLength / cartonLength);
+      const cartonsPerColumn = Math.floor(palletWidth / cartonWidth);
+      const cartonsPerLayer = Math.floor(palletHeight / cartonHeight);
+      const maxCartons = cartonsPerRow * cartonsPerColumn * cartonsPerLayer;
+
+      if (results.totalCartons < maxCartons) {
+        const additionalCartons = maxCartons - results.totalCartons;
+        recommendations.push(`You can fit ${additionalCartons} more cartons by optimizing arrangement`);
+      }
+
+      // Dimension optimization suggestions
+      const lengthWaste = palletLength - (cartonsPerRow * cartonLength);
+      const widthWaste = palletWidth - (cartonsPerColumn * cartonWidth);
+      const heightWaste = palletHeight - (cartonsPerLayer * cartonHeight);
+
+      if (lengthWaste > 5) {
+        const newLength = cartonLength + (lengthWaste / cartonsPerRow);
+        recommendations.push(`Increase carton length to ${newLength.toFixed(0)}cm to utilize ${lengthWaste.toFixed(0)}cm of wasted space`);
+      }
+
+      if (widthWaste > 5) {
+        const newWidth = cartonWidth + (widthWaste / cartonsPerColumn);
+        recommendations.push(`Increase carton width to ${newWidth.toFixed(0)}cm to utilize ${widthWaste.toFixed(0)}cm of wasted space`);
+      }
+
+      if (heightWaste > 5) {
+        const newHeight = cartonHeight + (heightWaste / cartonsPerLayer);
+        recommendations.push(`Increase carton height to ${newHeight.toFixed(0)}cm to utilize ${heightWaste.toFixed(0)}cm of wasted space`);
+      }
+
+      // Weight optimization
+      const remainingWeight = palletData.maxWeight - results.totalCartons * currentCarton.weight;
+      if (remainingWeight > 100) {
+        const additionalCartonsByWeight = Math.floor(remainingWeight / currentCarton.weight);
+        recommendations.push(`Pallet can handle ${remainingWeight.toFixed(0)}kg more weight (approximately ${additionalCartonsByWeight} more cartons)`);
+      }
+
+      // Product-specific recommendations
+      if (productDescription.toLowerCase().includes('fragile') || productDescription.toLowerCase().includes('glass')) {
+        recommendations.push('For fragile items: Reduce stacking height and add extra cushioning between layers');
+      }
+      if (productDescription.toLowerCase().includes('liquid') || productDescription.toLowerCase().includes('bottle')) {
+        recommendations.push('For liquids: Keep cartons upright and use dividers to prevent movement');
+      }
+    }
+
+    return recommendations;
   };
 
   const handleOptimize = async () => {
@@ -322,6 +391,18 @@ const PalletTab = () => {
 
       <Card>
         <CardHeader>
+          <CardTitle>Product Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ProductDescriptionInput 
+            value={productDescription}
+            onChange={setProductDescription}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calculator size={24} />
             Pallet Loading Optimization
@@ -355,12 +436,7 @@ const PalletTab = () => {
           maxItems={results.totalCartons}
           spaceUtilization={results.spaceUtilization}
           weightUtilization={results.weightUtilization}
-          recommendations={[
-            "Consider adding 3 more Type A cartons to maximize space",
-            "Current arrangement achieves excellent weight distribution",
-            "Alternate stacking pattern could improve stability",
-            "Weight limit allows for 15% more cartons if volume permits"
-          ]}
+          recommendations={generateSmartRecommendations()}
         />
       )}
     </div>

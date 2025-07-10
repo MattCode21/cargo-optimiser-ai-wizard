@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ImageUploader } from "./ImageUploader";
 import ThreeDViewer from "./ThreeDViewer";
 import OptimizationResults from "./OptimizationResults";
+import { ProductDescriptionInput } from "./ProductDescriptionInput";
 
 interface ProductData {
   image: string | null;
@@ -49,6 +50,7 @@ const MasterCartonTab = () => {
   });
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationComplete, setOptimizationComplete] = useState(false);
+  const [productDescription, setProductDescription] = useState('');
   const { toast } = useToast();
 
   const handleImageUpload = (imageUrl: string) => {
@@ -57,29 +59,6 @@ const MasterCartonTab = () => {
       title: "Image uploaded successfully",
       description: "Product image has been processed and background removed."
     });
-  };
-
-  const handleOptimize = async () => {
-    if (!productData.image || !productData.length || !cartonData.length) {
-      toast({
-        title: "Missing Information",
-        description: "Please complete all required fields before optimizing.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsOptimizing(true);
-    
-    // Simulate optimization process
-    setTimeout(() => {
-      setIsOptimizing(false);
-      setOptimizationComplete(true);
-      toast({
-        title: "Optimization Complete",
-        description: "Loading arrangement has been optimized successfully."
-      });
-    }, 3000);
   };
 
   const calculateMaxItems = () => {
@@ -124,12 +103,103 @@ const MasterCartonTab = () => {
     const volumeConstraint = Math.floor(containerVolume / productVolume);
     const weightConstraint = Math.floor(cartonData.maxWeight / productData.weight);
     
-    console.log(`Container volume: ${containerVolume.toFixed(2)} cm³`);
-    console.log(`Product volume: ${productVolume.toFixed(2)} cm³`);
-    console.log(`Volume constraint: ${volumeConstraint} items`);
-    console.log(`Weight constraint: ${weightConstraint} items`);
-    
     return Math.min(volumeConstraint, weightConstraint);
+  };
+
+  const generateSmartRecommendations = () => {
+    const maxItems = calculateMaxItems();
+    const recommendations: string[] = [];
+
+    if (productData.length > 0 && cartonData.length > 0) {
+      const convertToStandardUnit = (value: number, fromUnit: string): number => {
+        const conversions: { [key: string]: number } = {
+          'mm': 0.1, 'cm': 1, 'in': 2.54, 'ft': 30.48, 'm': 100
+        };
+        return value * (conversions[fromUnit] || 1);
+      };
+
+      const productLength = convertToStandardUnit(productData.length, productData.unit);
+      const productWidth = convertToStandardUnit(productData.width, productData.unit);
+      const productHeight = convertToStandardUnit(productData.height, productData.unit);
+      
+      const cartonLength = convertToStandardUnit(cartonData.length, cartonData.unit);
+      const cartonWidth = convertToStandardUnit(cartonData.width, cartonData.unit);
+      const cartonHeight = convertToStandardUnit(cartonData.height, cartonData.unit);
+
+      // Calculate how many products can fit in each dimension
+      const productsPerLength = Math.floor(cartonLength / productLength);
+      const productsPerWidth = Math.floor(cartonWidth / productWidth);
+      const productsPerHeight = Math.floor(cartonHeight / productHeight);
+      const theoreticalMax = productsPerLength * productsPerWidth * productsPerHeight;
+
+      if (maxItems < theoreticalMax) {
+        recommendations.push(`Theoretical maximum is ${theoreticalMax} items, but weight limits to ${maxItems} items`);
+      }
+
+      // Dimension optimization suggestions
+      const lengthWaste = cartonLength - (productsPerLength * productLength);
+      const widthWaste = cartonWidth - (productsPerWidth * productWidth);
+      const heightWaste = cartonHeight - (productsPerHeight * productHeight);
+
+      if (lengthWaste > 2) {
+        const newLength = cartonLength - lengthWaste + productLength;
+        recommendations.push(`Reduce carton length to ${newLength.toFixed(0)}cm to eliminate ${lengthWaste.toFixed(0)}cm waste, or fit one more product`);
+      }
+
+      if (widthWaste > 2) {
+        const newWidth = cartonWidth - widthWaste + productWidth;
+        recommendations.push(`Reduce carton width to ${newWidth.toFixed(0)}cm to eliminate ${widthWaste.toFixed(0)}cm waste, or fit one more product`);
+      }
+
+      if (heightWaste > 2) {
+        const newHeight = cartonHeight - heightWaste + productHeight;
+        recommendations.push(`Reduce carton height to ${newHeight.toFixed(0)}cm to eliminate ${heightWaste.toFixed(0)}cm waste, or fit one more product`);
+      }
+
+      // Weight optimization
+      const totalWeight = maxItems * productData.weight;
+      const remainingWeight = cartonData.maxWeight - totalWeight;
+      if (remainingWeight > productData.weight) {
+        const additionalItems = Math.floor(remainingWeight / productData.weight);
+        recommendations.push(`Carton can handle ${remainingWeight.toFixed(0)}kg more weight (${additionalItems} more items if space allows)`);
+      }
+
+      // Product-specific recommendations based on description
+      if (productDescription.toLowerCase().includes('door handle')) {
+        recommendations.push('For door handles: Use individual foam sleeves and arrange in single layer to prevent scratching');
+      }
+      if (productDescription.toLowerCase().includes('tile')) {
+        recommendations.push('For tiles: Stack vertically with paper sheets between each tile for maximum protection');
+      }
+      if (productDescription.toLowerCase().includes('electronic')) {
+        recommendations.push('For electronics: Use anti-static packaging and custom foam inserts for secure fit');
+      }
+    }
+
+    return recommendations;
+  };
+
+  const handleOptimize = async () => {
+    if (!productData.image || !productData.length || !cartonData.length) {
+      toast({
+        title: "Missing Information",
+        description: "Please complete all required fields before optimizing.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsOptimizing(true);
+    
+    // Simulate optimization process
+    setTimeout(() => {
+      setIsOptimizing(false);
+      setOptimizationComplete(true);
+      toast({
+        title: "Optimization Complete",
+        description: "Loading arrangement has been optimized successfully."
+      });
+    }, 3000);
   };
 
   const renderCartonDimensionInputs = () => {
@@ -284,14 +354,12 @@ const MasterCartonTab = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ImageUploader onImageUpload={handleImageUpload} />
-            {productData.image && (
-              <div className="mt-4 flex justify-end">
-                <Button onClick={() => setStep(2)}>
-                  Next: Product Dimensions
-                </Button>
-              </div>
-            )}
+            <ImageUploader />
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => setStep(2)}>
+                Next: Product Dimensions
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -378,6 +446,11 @@ const MasterCartonTab = () => {
                 </Select>
               </div>
             </div>
+
+            <ProductDescriptionInput 
+              value={productDescription}
+              onChange={setProductDescription}
+            />
 
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setStep(1)}>
@@ -506,11 +579,7 @@ const MasterCartonTab = () => {
               maxItems={calculateMaxItems()}
               spaceUtilization={85}
               weightUtilization={92}
-              recommendations={[
-                "Consider rotating products 90° to fit 2 more items",
-                "Current arrangement achieves optimal weight distribution",
-                "Space utilization could be improved by 5% with custom packaging"
-              ]}
+              recommendations={generateSmartRecommendations()}
             />
           )}
 
