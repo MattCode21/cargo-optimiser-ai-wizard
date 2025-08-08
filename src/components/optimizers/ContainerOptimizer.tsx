@@ -278,12 +278,12 @@ export const ContainerOptimizer = ({ category }: ContainerOptimizerProps) => {
                 isLoading={isOptimizing}
                 showResult={!!results}
                 maxItems={results?.maxUnits || 0}
-                containerDims={currentContainerDims}
+                containerDims={currentContainerDims as [number, number, number]}
                 itemDims={[
                   parseFloat(palletDims.length) || 120,
                   parseFloat(palletDims.width) || 100,
                   parseFloat(palletDims.height) || 150
-                ]}
+                ] as [number, number, number]}
                 containerUnit="cm"
                 itemUnit={palletDims.unit}
               />

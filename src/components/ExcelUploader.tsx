@@ -61,10 +61,10 @@ export const ExcelUploader = ({ category, onBack }: ExcelUploaderProps) => {
         const maxMasterInPallet = masterPackingResult.length;
 
         // Calculate max pallets in containers
-        const palletPacking20ft = getOptimalBinPacking(CONTAINER_20FT_DIMS, palletDims);
+        const palletPacking20ft = getOptimalBinPacking(CONTAINER_20FT_DIMS as [number, number, number], palletDims as [number, number, number]);
         const maxPalletsIn20ft = palletPacking20ft.length;
 
-        const palletPacking40ft = getOptimalBinPacking(CONTAINER_40FT_DIMS, palletDims);
+        const palletPacking40ft = getOptimalBinPacking(CONTAINER_40FT_DIMS as [number, number, number], palletDims as [number, number, number]);
         const maxPalletsIn40ft = palletPacking40ft.length;
 
         processedData.push({
