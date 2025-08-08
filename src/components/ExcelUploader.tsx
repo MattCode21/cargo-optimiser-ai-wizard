@@ -87,23 +87,62 @@ export const ExcelUploader = ({ category, onBack }: ExcelUploaderProps) => {
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+
+    console.log('File selected:', file.name, file.type, file.size);
+    toast.info(`Processing file: ${file.name}`);
 
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
+        console.log('File reading completed');
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
+        
+        console.log('Workbook sheets:', workbook.SheetNames);
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
         
+        console.log('Parsed JSON data:', jsonData);
+        console.log('Number of rows:', jsonData.length);
+        
+        if (jsonData.length === 0) {
+          toast.error('Excel file appears to be empty');
+          return;
+        }
+        
+        // Check if required columns exist
+        const firstRow = jsonData[0] as any;
+        const requiredColumns = [
+          'SKU Code', 'Product name', 'Tile dimensions', 'Tile weight',
+          'Master carton dimensions', 'Master carton weight', 
+          'Pallet dimensions', 'Pallet weight'
+        ];
+        
+        const missingColumns = requiredColumns.filter(col => !(col in firstRow));
+        if (missingColumns.length > 0) {
+          toast.error(`Missing required columns: ${missingColumns.join(', ')}`);
+          console.error('Missing columns:', missingColumns);
+          console.log('Available columns:', Object.keys(firstRow));
+          return;
+        }
+        
         processExcelData(jsonData);
       } catch (error) {
         toast.error('Error reading Excel file');
-        console.error(error);
+        console.error('Excel parsing error:', error);
       }
     };
+    
+    reader.onerror = (error) => {
+      toast.error('Error reading file');
+      console.error('FileReader error:', error);
+    };
+    
     reader.readAsArrayBuffer(file);
   };
 
