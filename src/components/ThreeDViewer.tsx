@@ -1,10 +1,11 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Text } from '@react-three/drei';
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, RotateCcw, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import * as THREE from 'three';
 
 interface ThreeDViewerProps {
   isLoading: boolean;
@@ -14,6 +15,10 @@ interface ThreeDViewerProps {
   itemDims: [number, number, number];
   containerUnit: string;
   itemUnit: string;
+  packingData?: Array<{
+    position: [number, number, number];
+    rotation: [number, number, number];
+  }>;
 }
 
 interface PlacedItem {
@@ -23,95 +28,213 @@ interface PlacedItem {
   rotated: boolean;
 }
 
-const SimpleBox = ({ position, args, color, rotation = [0, 0, 0] }: { 
-  position: [number, number, number], 
-  args: [number, number, number], 
-  color: string,
-  rotation?: [number, number, number]
+// Convert units to a standard unit (cm)
+const convertToStandardUnit = (value: number, fromUnit: string): number => {
+  const conversions: { [key: string]: number } = {
+    'mm': 0.1,
+    'cm': 1,
+    'in': 2.54,
+    'ft': 30.48,
+    'm': 100
+  };
+  return value * (conversions[fromUnit] || 1);
+};
+
+const PackedBox = ({ 
+  position, 
+  dimensions, 
+  rotation, 
+  color, 
+  opacity = 0.8,
+  index 
+}: { 
+  position: [number, number, number];
+  dimensions: [number, number, number];
+  rotation: [number, number, number];
+  color: string;
+  opacity?: number;
+  index: number;
 }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+
+  useFrame(() => {
+    if (meshRef.current && hovered) {
+      meshRef.current.rotation.y += 0.01;
+    }
+  });
+
   return (
-    <mesh position={position} rotation={rotation}>
-      <boxGeometry args={args} />
-      <meshStandardMaterial color={color} transparent opacity={0.9} />
-    </mesh>
+    <group position={position} rotation={rotation}>
+      <mesh
+        ref={meshRef}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
+        <boxGeometry args={dimensions} />
+        <meshPhongMaterial 
+          color={color} 
+          transparent 
+          opacity={hovered ? 0.9 : opacity}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Wireframe outline */}
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={dimensions} />
+        <meshBasicMaterial wireframe color="#333" opacity={0.3} transparent />
+      </mesh>
+      {/* Item number label */}
+      {hovered && (
+        <Text
+          position={[0, dimensions[1]/2 + 0.5, 0]}
+          fontSize={0.5}
+          color="#333"
+          anchorX="center"
+          anchorY="middle"
+        >
+          Item {index + 1}
+        </Text>
+      )}
+    </group>
   );
 };
 
-const WireframeBox = ({ position, args }: { position: [number, number, number], args: [number, number, number] }) => {
+const ContainerWireframe = ({ 
+  dimensions, 
+  containerType = "container" 
+}: { 
+  dimensions: [number, number, number];
+  containerType?: string;
+}) => {
+  const [width, height, depth] = dimensions;
+  
+  // Container color based on type
+  const getContainerColor = () => {
+    switch (containerType.toLowerCase()) {
+      case 'pallet': return '#8B4513'; // Brown for wooden pallet
+      case 'container': return '#4A5568'; // Gray for shipping container
+      default: return '#666'; // Default gray
+    }
+  };
+
   return (
-    <mesh position={position}>
-      <boxGeometry args={args} />
-      <meshBasicMaterial wireframe color="#666" />
-    </mesh>
+    <group>
+      {/* Container wireframe */}
+      <mesh position={[width/2, height/2, depth/2]}>
+        <boxGeometry args={[width, height, depth]} />
+        <meshBasicMaterial 
+          wireframe 
+          color={getContainerColor()}
+        />
+      </mesh>
+      
+      {/* Container base (solid) */}
+      <mesh position={[width/2, 0.05, depth/2]}>
+        <boxGeometry args={[width, 0.1, depth]} />
+        <meshPhongMaterial 
+          color={getContainerColor()} 
+          transparent 
+          opacity={0.3}
+        />
+      </mesh>
+
+      {/* Corner markers */}
+      {[
+        [0, 0, 0], [width, 0, 0], [0, 0, depth], [width, 0, depth],
+        [0, height, 0], [width, height, 0], [0, height, depth], [width, height, depth]
+      ].map((pos, i) => (
+        <mesh key={i} position={pos as [number, number, number]}>
+          <sphereGeometry args={[0.1]} />
+          <meshBasicMaterial color="#ff0000" />
+        </mesh>
+      ))}
+    </group>
   );
 };
 
-const LoadingAnimation = ({ itemCount }: { itemCount: number }) => {
-  const [currentItem, setCurrentItem] = useState(0);
+const AnimatedPacking = ({ 
+  items, 
+  containerDims, 
+  itemDims,
+  containerType = "container"
+}: { 
+  items: Array<{ position: [number, number, number]; rotation: [number, number, number] }>;
+  containerDims: [number, number, number];
+  itemDims: [number, number, number];
+  containerType?: string;
+}) => {
+  const [visibleItems, setVisibleItems] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(true);
 
   useEffect(() => {
-    if (currentItem >= itemCount) return;
-
-    const timer = setTimeout(() => {
-      setCurrentItem(prev => Math.min(prev + 1, itemCount));
-    }, 100);
-
-    return () => clearTimeout(timer);
-  }, [currentItem, itemCount]);
-
-  const items = useMemo(() => {
-    const result = [];
-    for (let i = 0; i < currentItem; i++) {
-      const x = (i % 3) - 1;
-      const y = Math.floor(i / 9) - 0.5;
-      const z = Math.floor((i % 9) / 3) - 1;
-      
-      result.push(
-        <SimpleBox
-          key={i}
-          position={[x * 1.2, y * 1.2, z * 1.2]}
-          args={[1, 1, 1]}
-          color={`hsl(${(i * 25) % 360}, 75%, 55%)`}
-        />
-      );
-    }
-    return result;
-  }, [currentItem]);
-
-  return (
-    <>
-      <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
-      {items}
-    </>
-  );
-};
-
-const StaticResult = ({ itemCount }: { itemCount: number }) => {
-  const items = useMemo(() => {
-    const result = [];
-    const maxDisplay = Math.min(itemCount, 27); // Limit to prevent performance issues
+    if (items.length === 0) return;
     
-    for (let i = 0; i < maxDisplay; i++) {
-      const x = (i % 3) - 1;
-      const y = Math.floor(i / 9) - 0.5;
-      const z = Math.floor((i % 9) / 3) - 1;
-      
-      result.push(
-        <SimpleBox
-          key={i}
-          position={[x * 1.2, y * 1.2, z * 1.2]}
-          args={[1, 1, 1]}
-          color={`hsl(${(i * 25) % 360}, 75%, 55%)`}
-        />
-      );
-    }
-    return result;
-  }, [itemCount]);
+    setVisibleItems(0);
+    setIsAnimating(true);
+    
+    const interval = setInterval(() => {
+      setVisibleItems(prev => {
+        if (prev >= items.length - 1) {
+          setIsAnimating(false);
+          clearInterval(interval);
+          return items.length;
+        }
+        return prev + 1;
+      });
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [items.length]);
+
+  const visibleItemsToShow = items.slice(0, visibleItems + 1);
 
   return (
     <>
-      <WireframeBox position={[0, 0, 0]} args={[6, 4, 3]} />
-      {items}
+      <ContainerWireframe dimensions={containerDims} containerType={containerType} />
+      {visibleItemsToShow.map((item, index) => {
+        // Apply item rotation to dimensions
+        const rotatedDims: [number, number, number] = [
+          itemDims[0], itemDims[1], itemDims[2]
+        ];
+        
+        // Adjust position to center the item properly
+        const adjustedPosition: [number, number, number] = [
+          item.position[0] + rotatedDims[0]/2,
+          item.position[1] + rotatedDims[1]/2,
+          item.position[2] + rotatedDims[2]/2
+        ];
+
+        return (
+          <PackedBox
+            key={index}
+            position={adjustedPosition}
+            dimensions={rotatedDims}
+            rotation={item.rotation}
+            color={`hsl(${(index * 137) % 360}, 70%, 60%)`}
+            opacity={0.85}
+            index={index}
+          />
+        );
+      })}
+      
+      {/* Loading indicator for next item */}
+      {isAnimating && visibleItems < items.length - 1 && (
+        <group position={[
+          items[visibleItems + 1]?.position[0] + itemDims[0]/2 || 0,
+          items[visibleItems + 1]?.position[1] + itemDims[1]/2 + 1 || 1,
+          items[visibleItems + 1]?.position[2] + itemDims[2]/2 || 0
+        ]}>
+          <Text
+            fontSize={0.5}
+            color="#ff6600"
+            anchorX="center"
+            anchorY="middle"
+          >
+            Placing...
+          </Text>
+        </group>
+      )}
     </>
   );
 };
@@ -123,81 +246,122 @@ const ThreeDViewer = ({
   containerDims, 
   itemDims, 
   containerUnit, 
-  itemUnit 
+  itemUnit,
+  packingData = []
 }: ThreeDViewerProps) => {
-  const [showLoadingAnimation, setShowLoadingAnimation] = useState(false);
-  const [spaceUtilization, setSpaceUtilization] = useState(0);
   const [resetKey, setResetKey] = useState(0);
   
-  const actualMaxItems = Math.min(maxItems || 0, 50); // Limit for performance
+  // Convert dimensions to standard unit (cm)
+  const convertedContainerDims: [number, number, number] = [
+    convertToStandardUnit(containerDims[0], containerUnit),
+    convertToStandardUnit(containerDims[1], containerUnit),
+    convertToStandardUnit(containerDims[2], containerUnit)
+  ];
+  
+  const convertedItemDims: [number, number, number] = [
+    convertToStandardUnit(itemDims[0], itemUnit),
+    convertToStandardUnit(itemDims[1], itemUnit),
+    convertToStandardUnit(itemDims[2], itemUnit)
+  ];
 
-  // Calculate space utilization only when needed
-  const calculatedUtilization = useMemo(() => {
-    if (!containerDims || !itemDims || !actualMaxItems) return 0;
+  // Calculate space utilization
+  const spaceUtilization = useMemo(() => {
+    if (!containerDims || !itemDims || !maxItems) return 0;
     
-    try {
-      const containerVolume = containerDims[0] * containerDims[1] * containerDims[2];
-      const itemVolume = itemDims[0] * itemDims[1] * itemDims[2];
-      const totalItemsVolume = actualMaxItems * itemVolume;
-      return Math.round((totalItemsVolume / containerVolume) * 100);
-    } catch (error) {
-      console.error('Error calculating utilization:', error);
-      return 0;
-    }
-  }, [containerDims, itemDims, actualMaxItems]);
+    const containerVolume = convertedContainerDims[0] * convertedContainerDims[1] * convertedContainerDims[2];
+    const itemVolume = convertedItemDims[0] * convertedItemDims[1] * convertedItemDims[2];
+    const totalItemsVolume = maxItems * itemVolume;
+    return Math.round((totalItemsVolume / containerVolume) * 100);
+  }, [convertedContainerDims, convertedItemDims, maxItems]);
 
-  useEffect(() => {
-    if (showResult && !isLoading) {
-      setShowLoadingAnimation(true);
-      const timer = setTimeout(() => {
-        setShowLoadingAnimation(false);
-        setSpaceUtilization(calculatedUtilization);
-      }, actualMaxItems * 50 + 1000);
-
-      return () => clearTimeout(timer);
+  // Generate fallback packing data if none provided
+  const fallbackPackingData = useMemo(() => {
+    if (packingData.length > 0) return packingData;
+    
+    const data = [];
+    const [cw, ch, cd] = convertedContainerDims;
+    const [iw, ih, id] = convertedItemDims;
+    
+    // Simple grid packing as fallback
+    const nx = Math.floor(cw / iw);
+    const ny = Math.floor(ch / ih);
+    const nz = Math.floor(cd / id);
+    
+    let count = 0;
+    for (let x = 0; x < nx && count < maxItems; x++) {
+      for (let y = 0; y < ny && count < maxItems; y++) {
+        for (let z = 0; z < nz && count < maxItems; z++) {
+          data.push({
+            position: [x * iw, y * ih, z * id] as [number, number, number],
+            rotation: [0, 0, 0] as [number, number, number]
+          });
+          count++;
+        }
+      }
     }
-  }, [showResult, isLoading, actualMaxItems, calculatedUtilization]);
+    
+    return data.slice(0, maxItems);
+  }, [packingData, convertedContainerDims, convertedItemDims, maxItems]);
 
   const handleReset = () => {
     setResetKey(prev => prev + 1);
-    setShowLoadingAnimation(false);
-    setSpaceUtilization(0);
   };
+
+  // Determine container type for better visualization
+  const containerType = useMemo(() => {
+    const volume = convertedContainerDims[0] * convertedContainerDims[1] * convertedContainerDims[2];
+    if (volume > 10000000) return "container"; // Large volume = shipping container
+    if (convertedContainerDims[1] < 50) return "pallet"; // Low height = pallet
+    return "box"; // Default
+  }, [convertedContainerDims]);
+
+  // Calculate camera position based on container size
+  const cameraPosition = useMemo(() => {
+    const maxDim = Math.max(...convertedContainerDims);
+    const distance = maxDim * 0.3;
+    return [distance, distance * 0.8, distance];
+  }, [convertedContainerDims]);
 
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-0">
-        <div className="h-96 bg-gradient-to-br from-slate-100 to-blue-100 dark:from-slate-900 dark:to-blue-900 rounded-lg overflow-hidden relative">
+        <div className="h-96 bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900 rounded-lg overflow-hidden relative">
           {isLoading ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <Loader2 className="animate-spin mx-auto mb-4 text-blue-600" size={40} />
                 <p className="text-lg font-medium text-gray-900 dark:text-gray-100">Optimizing placement...</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Advanced multi-orientation bin packing</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Calculating best fit positions</p>
               </div>
             </div>
-          ) : showResult ? (
+          ) : showResult && maxItems > 0 ? (
             <>
               <Canvas 
                 key={resetKey} 
-                camera={{ position: [8, 6, 8], fov: 50 }}
+                camera={{ 
+                  position: cameraPosition as [number, number, number], 
+                  fov: 50 
+                }}
                 className="bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-800 dark:to-blue-800"
               >
-                <ambientLight intensity={0.7} />
-                <directionalLight position={[10, 10, 5]} intensity={1.2} />
-                <spotLight position={[0, 10, 0]} intensity={0.5} />
-                {showLoadingAnimation ? (
-                  <LoadingAnimation itemCount={actualMaxItems} />
-                ) : (
-                  <StaticResult itemCount={actualMaxItems} />
-                )}
+                <ambientLight intensity={0.6} />
+                <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+                <pointLight position={[-10, -10, -5]} intensity={0.3} />
+                
+                <AnimatedPacking 
+                  items={fallbackPackingData}
+                  containerDims={convertedContainerDims}
+                  itemDims={convertedItemDims}
+                  containerType={containerType}
+                />
+                
                 <OrbitControls 
                   enableZoom 
                   enablePan 
                   enableRotate 
                   autoRotate={false}
-                  maxDistance={15}
-                  minDistance={3}
+                  maxDistance={Math.max(...convertedContainerDims) * 2}
+                  minDistance={Math.max(...convertedContainerDims) * 0.1}
                 />
               </Canvas>
               
@@ -206,7 +370,7 @@ const ThreeDViewer = ({
                   <div className="flex items-center gap-2 mb-2">
                     <Maximize className="h-4 w-4 text-blue-600" />
                     <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {showLoadingAnimation ? 'Optimizing...' : `${actualMaxItems} Items Packed`}
+                      {maxItems} Items Packed
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -214,17 +378,23 @@ const ThreeDViewer = ({
                       Space Utilization: <span className="font-semibold text-green-600">{spaceUtilization}%</span>
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">
-                      Max Capacity: {actualMaxItems} items
+                      Container: {convertedContainerDims[0]}×{convertedContainerDims[1]}×{convertedContainerDims[2]} cm
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Item Size: {convertedItemDims[0]}×{convertedItemDims[1]}×{convertedItemDims[2]} cm
                     </p>
                   </div>
                 </div>
                 
                 <div className="flex gap-2">
                   <Badge variant="secondary" className="text-xs">
-                    🔄 Optimized Layout
+                    🎯 Optimized Layout
                   </Badge>
                   <Badge variant="outline" className="text-xs">
-                    📦 3D Visualization
+                    📦 3D Packing
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    {containerType === "container" ? "🚢" : containerType === "pallet" ? "🏗️" : "📦"} {containerType}
                   </Badge>
                 </div>
               </div>
@@ -237,7 +407,7 @@ const ThreeDViewer = ({
                   className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm"
                 >
                   <RotateCcw className="h-4 w-4 mr-1" />
-                  Reset View
+                  Replay
                 </Button>
               </div>
             </>
@@ -247,7 +417,7 @@ const ThreeDViewer = ({
                 <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 rounded-xl mx-auto mb-4 flex items-center justify-center shadow-lg">
                   <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-md"></div>
                 </div>
-                <p className="text-gray-600 dark:text-gray-400 font-medium">3D visualization will appear here</p>
+                <p className="text-gray-600 dark:text-gray-400 font-medium">3D Packing Visualization</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">Start optimization to see results</p>
               </div>
             </div>
